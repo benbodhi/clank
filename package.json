@@ -2,13 +2,28 @@
   "name": "clanker-bot",
   "version": "1.0.0",
   "description": "Listens for new tokens and sends message in discord",
-  "main": "index.js",
+  "main": "src/bot.js",
   "scripts": {
+    "start": "node src/bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "discord",
+    "bot",
+    "base",
+    "ethereum",
+    "farcaster",
+    "clanker"
+  ],
+  "author": {
+    "name": "Benbodhi",
+    "url": "https://warpcast.com/benbodhi"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Benbodhi/clanker-bot.git"
+  },
+  "license": "MIT",
   "dependencies": {
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
