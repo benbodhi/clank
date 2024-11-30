@@ -145,6 +145,11 @@ The bot is designed to be deployed on platforms like Railway. Make sure to set t
    - Use the "Deployments" tab to monitor builds
    - Use the "Logs" tab to watch your bot's output
 
+*Note: You can use the following in the deploy settings to run the install-prod script:*
+```
+npm run install-prod && npm start
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
