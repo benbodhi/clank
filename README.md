@@ -25,7 +25,6 @@ A Discord bot that monitors new token deployments on Base through the Clanker co
   - Launch cast on Warpcast
 - 🏷️ Role pinging for low FID tokens (configurable threshold)
 - 👤 ENS and Base name resolution for deployer addresses
-- 🔄 Automatic WebSocket reconnection with exponential backoff
 - 🛑 Graceful shutdown handling
 
 ## Prerequisites
