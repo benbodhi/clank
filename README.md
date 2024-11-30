@@ -158,8 +158,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - **Benbodhi**
   - Farcaster: [@benbodhi](https://warpcast.com/benbodhi)
-  - Twitter: [@benbodhi_](https://twitter.com/benbodhi)
-  - GitHub: [@Benbodhi](https://github.com/Benbodhi)
+  - Twitter: [@benbodhi](https://twitter.com/benbodhi)
+  - GitHub: [@benbodhi](https://github.com/benbodhi)
 
 ## License
 
@@ -168,5 +168,6 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 ## Acknowledgments
 
 - Built for the Base ecosystem
+- We love Clanker
 - Uses ethers.js for blockchain interaction
 - Powered by Discord.js for Discord integration
