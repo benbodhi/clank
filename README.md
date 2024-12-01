@@ -8,16 +8,12 @@ A Discord bot that monitors new token deployments on Base through the Clanker co
 - 📊 Provides detailed token information including:
   - Token name and symbol
   - Contract address with links (Basescan, Dexscreener, Uniswap, Photon)
-  - Deployer information (Base name, ENS, address)
+  - Deployer address with blockchain explorer links
   - Farcaster ID (FID) with profile link and follower count
   - Supply details
   - LP NFT ID with Uniswap position link
   - Launch cast link
 - 🏷️ Role pinging for low FID tokens (configurable threshold)
-- 👤 Name resolution priority:
-  - Base name
-  - ENS name
-  - Raw address
 - 🔄 Automatic reconnection with exponential backoff
 - 💪 Resilient error handling and logging
 - 🛑 Graceful shutdown handling
@@ -28,7 +24,7 @@ A Discord bot that monitors new token deployments on Base through the Clanker co
 - npm or yarn
 - Discord bot token
 - Discord channel ID
-- Alchemy API key for Base network access
+- Alchemy API key for Base network
 
 ## Project Structure
 
@@ -39,7 +35,6 @@ project/
 │   │   ├── tokenCreatedHandler.js
 │   │   └── errorHandler.js
 │   ├── services/
-│   │   ├── nameResolver.js
 │   │   └── warpcastResolver.js
 │   ├── utils/
 │   │   └── discordMessenger.js
@@ -93,7 +88,6 @@ The bot's configuration is managed in `config.js`:
 - Contract Addresses:
   - Clanker Contract
   - Uniswap V3 Factory
-  - Base Name Registrar
 - Contract ABIs for interaction
 - Event topic hashes
 
@@ -104,7 +98,6 @@ The bot includes comprehensive error handling:
 - Graceful shutdown on process termination
 - Detailed error logging with timestamps
 - Service health monitoring
-- Fallback mechanisms for name resolution
 
 ## Deployment
 
@@ -119,9 +112,75 @@ The bot can be deployed on platforms like Railway:
    - Set environment variables
    - Deploy using `npm start`
 
+## Discord Bot Setup
+
+1. **Create a New Discord Application**
+   - Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+   - Click "New Application" and give it a name
+   - Go to the "Bot" section and click "Add Bot"
+   - Under "Privileged Gateway Intents", enable:
+     - Server Members Intent
+     - Message Content Intent
+
+2. **Get Your Bot Token**
+   - In the "Bot" section, click "Reset Token" to reveal your bot token
+   - Copy this token - you'll need it for your `.env` file
+   - Keep this token secret and never share it
+
+3. **Invite Bot to Your Server**
+   - Go to the "OAuth2" section, then "URL Generator"
+   - Select the following scopes:
+     - `bot`
+     - `applications.commands`
+   - Select the following bot permissions:
+     - `Read Messages/View Channels`
+     - `Send Messages`
+     - `Embed Links`
+     - `Read Message History`
+   - Copy the generated URL and open it in a browser
+   - Select your server and authorize the bot
+
+4. **Get Channel ID**
+   - In Discord, enable Developer Mode (Settings → App Settings → Advanced → Developer Mode)
+   - Right-click the channel where you want notifications and click "Copy Channel ID"
+   - Add this ID to your `.env` file
+
+5. **Set Up Role for Low FID Alerts** (Optional)
+   - Create a new role in your Discord server
+   - Right-click the role and click "Copy Role ID"
+   - Add this ID to your `.env` file as `LOW_FID_ROLE`
+
+## MEE6 Role Self-Service Setup
+
+1. **Add MEE6 to Your Server**
+   - Visit [MEE6's website](https://mee6.xyz/add)
+   - Select your server and authorize the bot
+   - Grant necessary permissions
+
+2. **Configure Reaction Roles**
+   - Go to your server's MEE6 dashboard
+   - Navigate to "Reaction Roles" feature
+   - Click "Create Reaction Role"
+   - Set up the following:
+     - Create a new message or use existing
+     - Add your Low FID Alert role
+     - Choose an emoji (e.g., 🔔)
+     - Save configuration
+
+3. **Example Message Format**
+```
+🚨 **Get Notified About Low FID Token Launches** 🚨
+
+Use the button below to get the role to receive notifications when tokens are launched by users with low Farcaster IDs (FIDs).
+```
+
+Now users can simply react to get the role and be notified about low FID token launches!
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+I had issues integrating basename resolution because all examples I found in docs are react components. ENS resolution was easy, but seemed to unnecessarily slow down processing. If you can integrate these efficiently, I'd love to display them.
 
 ## Author
 

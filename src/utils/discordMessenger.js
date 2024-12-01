@@ -1,8 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
 const config = require('../../config');
-const { resolveNames } = require('../services/nameResolver');
 const { getWarpcastUserData } = require('../services/warpcastResolver');
 const { handleError } = require('../handlers/errorHandler');
+const { ethers } = require('ethers');
 
 /**
  * Sends a Discord message with token creation details
@@ -16,7 +16,7 @@ async function sendDiscordMessage(tokenData, eventLog, discord, provider) {
         const channel = await getDiscordChannel(discord);
         if (!channel) return;
 
-        const embed = await createEmbed(tokenData, provider);
+        const embed = await createEmbed(tokenData);
         const content = createMessageContent(tokenData);
         
         await channel.send({ 
@@ -37,11 +37,20 @@ async function getDiscordChannel(discord) {
     return channel;
 }
 
-async function createEmbed(tokenData, provider) {
+function formatDeployerField(address) {
     try {
-        const resolvedName = await resolveNames(tokenData.deployer, provider);
+        const checksummedAddress = ethers.getAddress(address);
+        return `${checksummedAddress}\n**[Basescan](https://basescan.org/address/${address})** | **[Etherscan](https://etherscan.io/address/${address})**`;
+    } catch (error) {
+        handleError(error, 'Address Formatting');
+        return `${address}\n**[Basescan](https://basescan.org/address/${address})** | **[Etherscan](https://etherscan.io/address/${address})**`;
+    }
+}
+
+async function createEmbed(tokenData) {
+    try {
         const warpcastData = await getWarpcastUserData(tokenData.fid);
-        const deployerField = formatDeployerField(resolvedName, tokenData.deployer);
+        const deployerField = formatDeployerField(tokenData.deployer);
         const uniswapTradeLink = createUniswapTradeLink(tokenData.tokenAddress);
         const photonLink = tokenData.poolAddress ? 
             `| **[Photon](https://photon-base.tinyastro.io/en/lp/${tokenData.poolAddress})**` : 
@@ -65,23 +74,6 @@ function createMessageContent(tokenData) {
         return `**<@&${process.env.LOW_FID_ROLE}> 👀**\n**FID: ${tokenData.fid}**`;
     }
     return '';
-}
-
-function formatDeployerField(resolvedName, address) {
-    const lines = [];
-    
-    if (resolvedName.basename) {
-        lines.push(resolvedName.basename);
-    }
-    
-    if (resolvedName.ensName) {
-        lines.push(resolvedName.ensName);
-    }
-    
-    lines.push(resolvedName.address);
-    lines.push(`**[Basescan](https://basescan.org/address/${address})** | **[Etherscan](https://etherscan.io/address/${address})**`);
-    
-    return lines.join('\n');
 }
 
 function createUniswapTradeLink(tokenAddress) {
