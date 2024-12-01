@@ -111,7 +111,7 @@ class ClankerBot {
         this.discord.once('ready', () => {
             const timestamp = new Date().toISOString();
             console.log(`[${timestamp}] 🤖 Discord bot is ready!`);
-            console.log(`[${timestamp}] 👀 Listening for new token deployments from contract at address: ${config.clankerContract}`);
+            console.log(`[${timestamp}] 👀 Listening for new token deployments from contract at address: ${config.contracts.clanker}`);
         });
 
         this.discord.on('error', (error) => {
@@ -149,8 +149,8 @@ class ClankerBot {
             await this.provider.ready;
             
             this.clankerContract = new ethers.Contract(
-                config.clankerContract, 
-                config.clankerAbi, 
+                config.contracts.clanker, 
+                config.abis.clanker, 
                 this.provider
             );
 
