@@ -3,15 +3,99 @@ const { Client, GatewayIntentBits } = require('discord.js');
 require('dotenv').config();
 const config = require('../config');
 const { handleTokenCreated } = require('./handlers/tokenCreatedHandler');
-const { handleError } = require('./utils/errorHandler');
+const { handleError } = require('./handlers/errorHandler');
 
 class ClankerBot {
     constructor() {
+        this.isShuttingDown = false;
+        this.initCount = 0;
         this.lastEventTime = Date.now();
-        this.initializeDiscord();
-        this.initializeProvider();
-        this.setupEventListeners();
-        this.startHeartbeat();
+        this.isReconnecting = false;
+        
+        this.setupCleanupHandlers();
+        this.initializeServices();
+    }
+
+    setupCleanupHandlers() {
+        // Ensure clean shutdown on various signals
+        ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
+            process.on(signal, () => {
+                console.log(`\n${signal} received. Cleaning up...`);
+                this.cleanup(true);
+            });
+        });
+    }
+
+    async initializeServices() {
+        if (this.isShuttingDown) return;
+        
+        try {
+            await this.initializeDiscord();
+            await this.initializeProvider();
+            this.setupEventListeners();
+            this.startHeartbeat();
+        } catch (error) {
+            handleError(error, 'Services Initialization');
+            if (!this.isReconnecting) {
+                setTimeout(() => this.initializeServices(), 30000);
+            }
+        }
+    }
+
+    async cleanup(shouldExit = true) {
+        if (this.isShuttingDown) return;
+        this.isShuttingDown = true;
+
+        console.log('\nShutting down services...');
+        
+        try {
+            // Remove all listeners first
+            if (this.clankerContract) {
+                this.clankerContract.removeAllListeners();
+            }
+            
+            if (this.provider) {
+                this.provider.removeAllListeners();
+                await this.provider.destroy();
+                this.provider = null;
+            }
+
+            if (this.discord) {
+                await this.discord.destroy();
+                this.discord = null;
+            }
+
+            if (shouldExit) {
+                // Force exit after 3 seconds if normal exit fails
+                setTimeout(() => {
+                    console.log('Forcing exit...');
+                    process.exit(1);
+                }, 3000);
+                
+                process.exit(0);
+            }
+        } catch (error) {
+            handleError(error, 'Cleanup');
+            if (shouldExit) {
+                process.exit(1);
+            }
+        }
+    }
+
+    async reinitializeServices() {
+        if (this.isShuttingDown) return;
+        
+        console.log('Reinitializing all services...');
+        try {
+            await this.cleanup(false);
+            this.isShuttingDown = false;
+            this.initCount = 0;
+            await this.initializeServices();
+        } catch (error) {
+            handleError(error, 'Services Reinitialization');
+            // Wait 30 seconds before trying again
+            setTimeout(() => this.reinitializeServices(), 30000);
+        }
     }
 
     initializeDiscord() {
@@ -25,8 +109,9 @@ class ClankerBot {
         this.discord.login(process.env.DISCORD_TOKEN);
         
         this.discord.once('ready', () => {
-            console.log('Discord bot is ready!');
-            console.log(`Listening for new token deployments from contract at address: ${config.clankerContract}`);
+            const timestamp = new Date().toISOString();
+            console.log(`[${timestamp}] 🤖 Discord bot is ready!`);
+            console.log(`[${timestamp}] 👀 Listening for new token deployments from contract at address: ${config.clankerContract}`);
         });
 
         this.discord.on('error', (error) => {
@@ -47,11 +132,21 @@ class ClankerBot {
         }
     }
 
-    initializeProvider() {
+    async initializeProvider() {
+        if (this.isReconnecting) return;
+        
         try {
+            if (this.provider) {
+                this.provider.removeAllListeners();
+                await this.provider.destroy();
+            }
+
             this.provider = new ethers.WebSocketProvider(
                 `wss://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
             );
+            
+            // Wait for provider to be ready
+            await this.provider.ready;
             
             this.clankerContract = new ethers.Contract(
                 config.clankerContract, 
@@ -59,24 +154,64 @@ class ClankerBot {
                 this.provider
             );
 
-            // Update lastEventTime when we receive any event
+            // Setup WebSocket error handling after provider is ready
+            if (this.provider._websocket) {
+                this.provider._websocket.on('error', (error) => {
+                    handleError(error, 'WebSocket Provider');
+                    if (!this.isReconnecting) {
+                        this.reconnectProvider();
+                    }
+                });
+
+                this.provider._websocket.on('close', () => {
+                    const timestamp = new Date().toISOString();
+                    console.log(`[${timestamp}] ⚠️ WebSocket closed, attempting to reconnect...`);
+                    if (!this.isReconnecting) {
+                        this.reconnectProvider();
+                    }
+                });
+            }
+
             this.provider.on('block', () => {
                 this.lastEventTime = Date.now();
             });
 
-            console.log('WebSocket Provider initialized successfully');
+            const timestamp = new Date().toISOString();
+            console.log(`[${timestamp}] 🔌 WebSocket Provider initialized successfully`);
         } catch (error) {
             handleError(error, 'Provider Initialization');
-            // Wait 30 seconds before trying again
-            setTimeout(() => this.initializeProvider(), 30000);
+            if (!this.isReconnecting) {
+                this.reconnectProvider();
+            }
+        }
+    }
+
+    async reconnectProvider() {
+        if (this.isReconnecting || this.isShuttingDown) return;
+        
+        this.isReconnecting = true;
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] 🔄 Attempting to reconnect WebSocket...`);
+        
+        try {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+            await this.initializeProvider();
+            this.isReconnecting = false;
+        } catch (error) {
+            handleError(error, 'Provider Reconnection');
+            this.isReconnecting = false;
+            // Try again in 30 seconds
+            setTimeout(() => this.reconnectProvider(), 30000);
         }
     }
 
     setupEventListeners() {
-        this.clankerContract.on('TokenCreated', async (...args) => {
-            this.lastEventTime = Date.now();
-            await handleTokenCreated(args, this.provider, this.discord);
-        });
+        if (this.clankerContract) {
+            this.clankerContract.on('TokenCreated', async (...args) => {
+                this.lastEventTime = Date.now();
+                await handleTokenCreated(args, this.provider, this.discord);
+            });
+        }
 
         process.on('SIGINT', () => this.cleanup());
         process.on('SIGTERM', () => this.cleanup());
@@ -110,40 +245,6 @@ class ClankerBot {
             console.log(`Health check: Last event at ${lastEventTimestamp}`);
             
         }, 5 * 60 * 1000); // 5 minutes
-    }
-
-    async reinitializeServices() {
-        console.log('Reinitializing all services...');
-        try {
-            await this.cleanup(false); // Don't exit process
-            this.initializeDiscord();
-            this.initializeProvider();
-            this.setupEventListeners();
-        } catch (error) {
-            handleError(error, 'Services Reinitialization');
-            // Wait 30 seconds before trying again
-            setTimeout(() => this.reinitializeServices(), 30000);
-        }
-    }
-
-    async cleanup(shouldExit = true) {
-        console.log('\nShutting down services...');
-        try {
-            if (this.provider) {
-                await this.provider.destroy();
-            }
-            if (this.discord) {
-                await this.discord.destroy();
-            }
-            if (shouldExit) {
-                process.exit();
-            }
-        } catch (error) {
-            handleError(error, 'Cleanup');
-            if (shouldExit) {
-                process.exit(1);
-            }
-        }
     }
 }
 

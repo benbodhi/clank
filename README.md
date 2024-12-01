@@ -7,33 +7,28 @@ A Discord bot that monitors new token deployments on Base through the Clanker co
 - 🔍 Monitors new token deployments in real-time
 - 📊 Provides detailed token information including:
   - Token name and symbol
-  - Contract address
-  - Deployer information
-  - Farcaster ID (FID)
+  - Contract address with links (Basescan, Dexscreener, Uniswap, Photon)
+  - Deployer information (Base name, ENS, address)
+  - Farcaster ID (FID) with profile link and follower count
   - Supply details
-  - LP NFT ID
-  - Locker address
-  - Associated links (Basescan, Dexscreener, Uniswap, etc.)
-- 🔗 Automatically generates relevant links for:
-  - Token contract on Basescan
-  - Dexscreener
-  - Trade on Uniswap
-  - Trade on Photon
-  - LP position on Uniswap
-  - Deployer address on Basescan
-  - Farcaster profile
-  - Launch cast on Warpcast
+  - LP NFT ID with Uniswap position link
+  - Launch cast link
 - 🏷️ Role pinging for low FID tokens (configurable threshold)
-- 👤 ENS and Base name resolution for deployer addresses
+- 👤 Name resolution priority:
+  - Base name
+  - ENS name
+  - Raw address
+- 🔄 Automatic reconnection with exponential backoff
+- 💪 Resilient error handling and logging
 - 🛑 Graceful shutdown handling
 
 ## Prerequisites
 
-- Node.js v16 or higher
+- Node.js v18 or higher
 - npm or yarn
-- A Discord bot token
-- A Discord channel ID
-- An Alchemy API key for Base network access
+- Discord bot token
+- Discord channel ID
+- Alchemy API key for Base network access
 
 ## Project Structure
 
@@ -41,11 +36,13 @@ A Discord bot that monitors new token deployments on Base through the Clanker co
 project/
 ├── src/
 │   ├── handlers/
-│   │   └── tokenCreatedHandler.js
-│   ├── utils/
-│   │   ├── nameResolver.js
-│   │   ├── discordMessenger.js
+│   │   ├── tokenCreatedHandler.js
 │   │   └── errorHandler.js
+│   ├── services/
+│   │   ├── nameResolver.js
+│   │   └── warpcastResolver.js
+│   ├── utils/
+│   │   └── discordMessenger.js
 │   └── bot.js
 ├── config.js
 ├── package.json
@@ -64,12 +61,10 @@ cp .env.example .env
 ```
 
 Required variables:
-- `DISCORD_TOKEN`: Your Discord bot token from the Discord Developer Portal
-- `DISCORD_CHANNEL_ID`: The ID of the channel where notifications will be sent
-- `ALCHEMY_API_KEY`: Your Alchemy API key for Base network access
-
-Optional variables:
-- `LOW_FID_ROLE`: Discord role ID to ping for low FID tokens (if not set, no role pinging will occur)
+- `DISCORD_TOKEN`: Your Discord bot token
+- `DISCORD_CHANNEL_ID`: Channel ID for notifications
+- `ALCHEMY_API_KEY`: Alchemy API key for Base network
+- `LOW_FID_ROLE`: Discord role ID to ping for low FID tokens
 
 ## Installation
 
@@ -93,62 +88,36 @@ npm start
 
 ## Configuration
 
-The bot uses the following configurations in `config.js`:
-- Clanker Contract: `0x9b84fce5dcd9a38d2d01d5d72373f6b6b067c3e1`
-- Uniswap V3 Factory: `0x33128a8fc17869897dce68ed026d694621f6fdfd`
-- FID Threshold: Configurable value (default: 20000) for role notifications
+The bot's configuration is managed in `config.js`:
+- FID Threshold: Configurable value for role notifications
+- Contract Addresses:
+  - Clanker Contract
+  - Uniswap V3 Factory
+  - Base Name Registrar
+- Contract ABIs for interaction
+- Event topic hashes
 
 ## Error Handling
 
-The bot includes:
-- Automatic WebSocket reconnection with exponential backoff
+The bot includes comprehensive error handling:
+- Automatic WebSocket reconnection
 - Graceful shutdown on process termination
-- Comprehensive error logging
-- Resilient name resolution fallbacks
+- Detailed error logging with timestamps
+- Service health monitoring
+- Fallback mechanisms for name resolution
 
 ## Deployment
 
-The bot is designed to be deployed on platforms like Railway. Make sure to set the required environment variables in your deployment platform.
+The bot can be deployed on platforms like Railway:
 
-### Deploying to Railway
+1. **Prepare Repository**
+   - Push code to GitHub
+   - Ensure `.gitignore` includes sensitive files
 
-1. **Prepare Your Repository**
-   - Push your code to GitHub
-   - Make sure `.gitignore` includes:
-     ```
-     node_modules/
-     .env
-     ```
-
-2. **Sign Up for Railway**
-   - Go to [Railway.app](https://railway.app/)
-   - Sign in with your GitHub account
-
-3. **Create New Project**
-   - Click "New Project"
-   - Select "Deploy from GitHub repo"
-   - Choose your repository
-
-4. **Configure Environment Variables**
-   - Go to your project's "Variables" tab
-   - Add all variables from your `.env`:
-     - DISCORD_TOKEN
-     - DISCORD_CHANNEL_ID
-     - ALCHEMY_API_KEY
-     - LOW_FID_ROLE
-
-5. **Deploy**
-   - Railway will automatically deploy when it detects the package.json
-   - It will use the `npm start` command defined in package.json
-
-6. **Monitor**
-   - Use the "Deployments" tab to monitor builds
-   - Use the "Logs" tab to watch your bot's output
-
-*Note: You can use the following in the deploy settings to run the install-prod script:*
-```
-npm run install-prod && npm start
-```
+2. **Deploy on Railway**
+   - Create new project from GitHub repo
+   - Set environment variables
+   - Deploy using `npm start`
 
 ## Contributing
 
@@ -169,5 +138,5 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 - Built for the Base ecosystem
 - We love Clanker
-- Uses ethers.js for blockchain interaction
+- Uses ethers.js v6 for blockchain interaction
 - Powered by Discord.js for Discord integration
