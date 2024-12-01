@@ -90,8 +90,8 @@ function createUniswapTradeLink(tokenAddress) {
 
 function createEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData) {
     const farcasterValue = warpcastData ? 
-        `FID: ${tokenData.fid} | **[${warpcastData.username}](https://warpcast.com/~/profiles/${tokenData.fid})** | ${warpcastData.followerCount.toLocaleString()} followers` :
-        `FID: ${tokenData.fid}`;
+        `${tokenData.fid} | **[${warpcastData.username}](https://warpcast.com/~/profiles/${tokenData.fid})** | ${warpcastData.followerCount.toLocaleString()} followers` :
+        `${tokenData.fid}`;
 
     const fields = [
         { name: 'Token Name', value: tokenData.name, inline: true },
