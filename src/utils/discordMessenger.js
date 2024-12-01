@@ -11,20 +11,21 @@ const { ethers } = require('ethers');
  * @param {Discord.Client} discord - Discord client instance
  * @param {ethers.Provider} provider - Ethers provider instance
  */
-async function sendDiscordMessage(tokenData, eventLog, discord, provider) {
+async function sendDiscordMessage(tokenData, eventLog, discord) {
     try {
-        const channel = await getDiscordChannel(discord);
-        if (!channel) return;
+        const channel = await discord.channels.fetch(process.env.DISCORD_CHANNEL_ID);
+        if (!channel) {
+            throw new Error('Could not find Discord channel');
+        }
 
-        const embed = await createEmbed(tokenData);
-        const content = createMessageContent(tokenData);
-        
-        await channel.send({ 
-            content,
-            embeds: [embed] 
-        });
+        const warpcastData = await getWarpcastUserData(tokenData.fid);
+        const embed = await createEmbed(tokenData, warpcastData);
+        const content = createMessageContent(tokenData, warpcastData);
+
+        await channel.send({ content, embeds: [embed] });
     } catch (error) {
-        handleError(error, 'Discord Message Sending');
+        handleError(error, 'Discord Message');
+        throw error;
     }
 }
 
@@ -47,9 +48,8 @@ function formatDeployerField(address) {
     }
 }
 
-async function createEmbed(tokenData) {
+async function createEmbed(tokenData, warpcastData) {
     try {
-        const warpcastData = await getWarpcastUserData(tokenData.fid);
         const deployerField = formatDeployerField(tokenData.deployer);
         const uniswapTradeLink = createUniswapTradeLink(tokenData.tokenAddress);
         const photonLink = tokenData.poolAddress ? 
@@ -69,11 +69,22 @@ async function createEmbed(tokenData) {
     }
 }
 
-function createMessageContent(tokenData) {
+function createMessageContent(tokenData, warpcastData) {
+    const messages = [];
+    
+    // Low FID notification
     if (Number(tokenData.fid) < config.fidThreshold) {
-        return `**<@&${process.env.LOW_FID_ROLE}> 👀**\n**FID: ${tokenData.fid}**`;
+        messages.push(`**<@&${process.env.LOW_FID_ROLE}> 👀**`);
+        messages.push(`**FID: ${tokenData.fid}**`);
     }
-    return '';
+    
+    // High follower notification
+    if (warpcastData?.followerCount >= config.followerThreshold) {
+        messages.push(`**<@&${process.env.HIGH_FOLLOWER_ROLE}> 🔥**`);
+        messages.push(`**Followers: ${warpcastData.followerCount.toLocaleString()}**`);
+    }
+    
+    return messages.join('\n');
 }
 
 function createUniswapTradeLink(tokenAddress) {

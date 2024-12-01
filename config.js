@@ -6,6 +6,8 @@
 const config = {
     /** Threshold for considering a FID as "low" */
     fidThreshold: 10000,
+    /** Threshold for considering a user as "high followers" */
+    followerThreshold: 10000,
 
     /** Contract Addresses */
     contracts: {

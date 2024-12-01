@@ -60,6 +60,7 @@ Required variables:
 - `DISCORD_CHANNEL_ID`: Channel ID for notifications
 - `ALCHEMY_API_KEY`: Alchemy API key for Base network
 - `LOW_FID_ROLE`: Discord role ID to ping for low FID tokens
+- `HIGH_FOLLOWER_ROLE`: Discord role ID to ping for high follower accounts
 
 ## Installation
 
