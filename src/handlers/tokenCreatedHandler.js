@@ -88,7 +88,7 @@ async function getPoolAddress(event, provider) {
         }
 
         const poolCreatedLog = txReceipt.logs.find(log => 
-            log.address.toLowerCase() === config.uniswapFactory.toLowerCase()
+            log.address && log.address.toLowerCase() === config.contracts.uniswapFactory.toLowerCase()
         );
 
         if (poolCreatedLog) {
