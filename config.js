@@ -1,5 +1,5 @@
 module.exports = {
-    fidThreshold: 20000,
+    fidThreshold: 10000,
     clankerContract: '0x9b84fce5dcd9a38d2d01d5d72373f6b6b067c3e1',
     uniswapFactory: '0x33128a8fc17869897dce68ed026d694621f6fdfd',
     clankerAbi: [

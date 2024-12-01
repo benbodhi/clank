@@ -18,7 +18,9 @@ async function handleTokenCreated(args, provider, discord) {
             castHash
         ] = args;
 
-        console.log(`\n New token deployment detected: ${name} (${symbol})`);
+        const timestamp = new Date().toISOString();
+        console.log(`\n New token created at ${timestamp}`);
+        console.log(`Name: ${name} (${symbol})`);
         console.log(`Token Address: ${tokenAddress}`);
         console.log(`Deployer: ${deployer}`);
         console.log(`FID: ${fid}`);
@@ -39,16 +41,19 @@ async function handleTokenCreated(args, provider, discord) {
         };
 
         await sendDiscordMessage(tokenData, event.log, discord, provider);
-        console.log('✅ Discord notification sent successfully\n');
+        console.log(`[${timestamp}] ✅ Discord notification sent successfully\n`);
 
     } catch (error) {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] ❌ Error processing token creation:`);
         handleError(error, 'Token Created Handler');
     }
 }
 
 async function getPoolAddress(event, provider) {
     if (event?.log?.transactionHash) {
-        console.log(`Transaction Hash: ${event.log.transactionHash}`);
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] Transaction Hash: ${event.log.transactionHash}`);
         const txReceipt = await provider.getTransactionReceipt(event.log.transactionHash);
         if (txReceipt) {
             const poolCreatedLog = txReceipt.logs.find(log => 
@@ -56,13 +61,14 @@ async function getPoolAddress(event, provider) {
             );
             if (poolCreatedLog) {
                 const poolAddress = '0x' + poolCreatedLog.data.slice(-40);
-                console.log(`Pool Address: ${poolAddress}`);
+                console.log(`[${timestamp}] Pool Address: ${poolAddress}`);
                 return poolAddress;
             }
-            console.log('No pool created log found');
+            console.log(`[${timestamp}] No pool created log found`);
         }
     } else {
-        console.log('Warning: No transaction hash found in event');
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] Warning: No transaction hash found in event`);
     }
     return '';
 }
