@@ -60,7 +60,26 @@ const config = {
                 name: "PoolCreated",
                 type: "event"
             }
+        ],
+        token: [
+            {
+                "inputs": [],
+                "name": "image",
+                "outputs": [
+                    {
+                        "internalType": "string",
+                        "name": "",
+                        "type": "string"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
         ]
+    },
+
+    features: {
+        displayImages: true  // Toggle this to enable/disable images
     }
 };
 

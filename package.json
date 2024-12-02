@@ -5,7 +5,6 @@
   "main": "src/bot.js",
   "scripts": {
     "start": "node src/bot.js",
-    "dev": "node src/bot.js",
     "install-prod": "npm install --omit=dev"
   },
   "keywords": [

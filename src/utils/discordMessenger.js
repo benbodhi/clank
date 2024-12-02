@@ -82,13 +82,20 @@ async function createEmbed(tokenData, warpcastData) {
             embedColor = '#550055'; // darkest purple
         }
 
-        return new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setColor(embedColor)
             .setTitle('🔔 Clank Clank!')
             .addFields(
                 ...createEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData)
             )
             .setTimestamp();
+
+        // Add image if available
+        if (tokenData.imageUrl) {
+            embed.setImage(tokenData.imageUrl);
+        }
+
+        return embed;
     } catch (error) {
         handleError(error, 'Discord Embed Creation');
         throw error;
@@ -98,39 +105,56 @@ async function createEmbed(tokenData, warpcastData) {
 function createMessageContent(tokenData, warpcastData) {
     const messages = [];
     const fid = Number(tokenData.fid);
+    const followers = warpcastData?.followerCount || 0;
     
-    // FID threshold notifications
+    // FID threshold notifications (cascade down)
     if (fid < config.fidThresholds.below1000) {
-        messages.push(`**<@&${process.env.FID_BELOW_1000_ROLE}> 🔥**`);
+        messages.push(`**<@&${process.env.FID_BELOW_1000_ROLE}> 🔥**\n`);
+        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
+        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
     } else if (fid < config.fidThresholds.below5000) {
-        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**`);
+        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
+        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
     } else if (fid < config.fidThresholds.below10000) {
-        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**`);
+        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
     }
     
-    // Follower threshold notifications
-    if (warpcastData?.followerCount) {
-        const followers = warpcastData.followerCount;
-        if (followers >= config.followerThresholds.over200000) {
-            messages.push(`**<@&${process.env.FOLLOWERS_OVER_200000_ROLE}> 🌟**`);
-        } else if (followers >= config.followerThresholds.over100000) {
-            messages.push(`**<@&${process.env.FOLLOWERS_OVER_100000_ROLE}> 🚀**`);
-        } else if (followers >= config.followerThresholds.over50000) {
-            messages.push(`**<@&${process.env.FOLLOWERS_OVER_50000_ROLE}> 💫**`);
-        } else if (followers >= config.followerThresholds.over20000) {
-            messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**`);
-        } else if (followers >= config.followerThresholds.over10000) {
-            messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**`);
-        } else if (followers >= config.followerThresholds.over5000) {
-            messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**`);
-        }
+    // Follower threshold notifications (cascade up)
+    if (followers >= config.followerThresholds.over200000) {
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_50000_ROLE}> 💫**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_100000_ROLE}> 🚀**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_200000_ROLE}> 🌟**\n`);
+    } else if (followers >= config.followerThresholds.over100000) {
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_50000_ROLE}> 💫**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_100000_ROLE}> 🚀**\n`);
+    } else if (followers >= config.followerThresholds.over50000) {
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_50000_ROLE}> 💫**\n`);
+    } else if (followers >= config.followerThresholds.over20000) {
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**\n`);
+    } else if (followers >= config.followerThresholds.over10000) {
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
+    } else if (followers >= config.followerThresholds.over5000) {
+        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
     }
     
+    // Add FID and Follower count information only if there are threshold tags
     if (messages.length > 0) {
-        messages.push(`**FID: ${tokenData.fid}${warpcastData ? ` | Followers: ${warpcastData.followerCount.toLocaleString()}` : ''}**`);
+        messages.push(`\n**FID: ${fid.toLocaleString()} | Followers: ${followers.toLocaleString()}**`);
     }
     
-    return messages.join('\n');
+    return messages.join('');
 }
 
 function createUniswapTradeLink(tokenAddress) {
@@ -154,7 +178,7 @@ function createEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLin
         { name: 'FID', value: farcasterValue, inline: false },
         { name: 'Cast', value: `**[View Launch Cast](https://warpcast.com/~/conversations/${tokenData.castHash})**`, inline: false },
         { name: 'Supply', value: tokenData.supply, inline: false },
-        { name: 'LP Position', value: `**[NFT ID: ${tokenData.lpNftId}](https://app.uniswap.org/#/pool/${tokenData.lpNftId})**`, inline: false }
+        { name: 'LP Position', value: `**[${tokenData.lpNftId}](https://app.uniswap.org/#/pool/${tokenData.lpNftId})**`, inline: false }
     ];
 
     return fields;

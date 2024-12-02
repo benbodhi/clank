@@ -2,6 +2,7 @@ const { formatUnits } = require('ethers');
 const config = require('../../config');
 const { sendDiscordMessage } = require('../utils/discordMessenger');
 const { handleError } = require('./errorHandler');
+const ethers = require('ethers');
 
 /**
  * Handles new token creation events
@@ -10,6 +11,7 @@ const { handleError } = require('./errorHandler');
  * @param {Discord.Client} discord - Discord client instance
  */
 async function handleTokenCreated(args, provider, discord) {
+    const startTime = Date.now();
     const timestamp = new Date().toISOString();
     
     try {
@@ -35,13 +37,25 @@ async function handleTokenCreated(args, provider, discord) {
             throw new Error('Missing required token data');
         }
 
-        console.log(`\n[${timestamp}] 📝 New token deployment detected:`);
+        console.log(`\n[${timestamp}] 📝 New token deployment detected`);
+        console.log('\nToken Details:');
         console.log(`Name: ${name} (${symbol})`);
         console.log(`Token Address: ${tokenAddress}`);
         console.log(`Deployer: ${deployer}`);
         console.log(`FID: ${fid}`);
         
+        // Get pool address
+        console.time('Pool Address Resolution');
         const poolAddress = await getPoolAddress(event, provider);
+        console.timeEnd('Pool Address Resolution');
+        
+        // Only fetch image if enabled in config
+        let imageUrl = null;
+        if (config.features.displayImages) {
+            console.time('Image Fetch');
+            imageUrl = await getTokenImage(tokenAddress, provider);
+            console.timeEnd('Image Fetch');
+        }
         
         const tokenData = {
             tokenAddress,
@@ -53,11 +67,17 @@ async function handleTokenCreated(args, provider, discord) {
             supply: formatUnits(supply, 18),
             lockerAddress,
             castHash,
-            poolAddress
+            poolAddress,
+            ...(imageUrl && { imageUrl })
         };
 
+        // Send Discord notification
+        console.time('Discord Message Send');
         await sendDiscordMessage(tokenData, event.log, discord);
-        console.log(`[${timestamp}] ✅ Discord notification sent successfully\n`);
+        console.timeEnd('Discord Message Send');
+
+        const processingTime = Date.now() - startTime;
+        console.log(`\n✅ Process completed in ${processingTime}ms\n`);
 
     } catch (error) {
         handleError(error, 'Token Created Handler');
@@ -103,6 +123,29 @@ async function getPoolAddress(event, provider) {
     } catch (error) {
         handleError(error, 'Pool Address Resolution');
         return '';
+    }
+}
+
+async function getTokenImage(tokenAddress, provider) {
+    try {
+        const tokenContract = new ethers.Contract(
+            tokenAddress,
+            config.abis.token,
+            provider
+        );
+
+        const imageUrl = await tokenContract.image();
+        
+        // Basic URL validation
+        if (imageUrl && 
+            typeof imageUrl === 'string' && 
+            (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+            return imageUrl;
+        }
+        return null;
+    } catch (error) {
+        handleError(error, 'Token Image Fetch');
+        return null;
     }
 }
 

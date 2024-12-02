@@ -13,10 +13,12 @@ A Discord bot that monitors new token deployments on Base through the Clanker co
   - Supply details
   - LP NFT ID with Uniswap position link
   - Launch cast link
+  - Token images (configurable)
 - 🏷️ Role pinging for low FID tokens (configurable threshold)
 - 🔄 Automatic reconnection with exponential backoff
 - 💪 Resilient error handling and logging
 - 🛑 Graceful shutdown handling
+- 🚫 Avoids sending notifications if deployer has 0 followers on Farcaster
 
 ## Prerequisites
 
@@ -100,6 +102,8 @@ The bot's configuration is managed in `config.js`:
   - Uniswap V3 Factory
 - Contract ABIs for interaction
 - Event topic hashes
+- Features:
+  - `displayImages`: Toggle token images in notifications (set to `false` for faster processing)
 
 ## Error Handling
 
@@ -212,7 +216,55 @@ The bot can be deployed on platforms like Railway:
 Use the button below to get the role to receive notifications when tokens are launched by users with low Farcaster IDs (FIDs).
 ```
 
-Now users can simply react to get the role and be notified about low FID token launches!
+Now users can simply react to get the roles and be notified about token launches by casters who meet the desired thresholds!
+
+## Role Selection Guide
+
+### Understanding Notifications
+The bot automatically tags all relevant roles for each new token. This means:
+
+**For FID Thresholds:**
+- If a token has FID 800, it will notify:
+  - Below 1,000 role 🔥 (because 800 < 1,000)
+  - Below 5,000 role 👀 (because 800 < 5,000)
+  - Below 10,000 role 📊 (because 800 < 10,000)
+
+**For Follower Thresholds:**
+- If a creator has 120k followers, it will notify:
+  - Over 100,000 role 🚀 (because 120k > 100k)
+  - Over 50,000 role 💫 (because 120k > 50k)
+  - Over 20,000 role ⭐ (because 120k > 20k)
+  - Over 10,000 role ✨ (because 120k > 10k)
+  - Over 5,000 role 📈 (because 120k > 5k)
+
+### Available Roles
+**FID Thresholds:**
+- Below 1,000 🔥
+- Below 5,000 👀
+- Below 10,000 📊
+
+**Follower Thresholds:**
+- Over 5,000 📈
+- Over 10,000 ✨
+- Over 20,000 ⭐
+- Over 50,000 💫
+- Over 100,000 🚀
+- Over 200,000 🌟
+
+### Selecting Your Roles
+1. **For FID notifications:**
+   - Select roles for the FID ranges you want to monitor
+   - You'll get notifications for all FIDs BELOW your selected numbers
+   - Example: "Below 5k" role will notify you about FIDs 1-4,999
+
+2. **For follower notifications:**
+   - Select roles for the follower counts you want to monitor
+   - You'll get notifications for all accounts ABOVE your selected numbers
+   - Example: "Over 20k" role will notify you about accounts with 20k+ followers
+
+3. **Want both?**
+   - Select both FID and follower roles
+   - You'll get notifications when EITHER condition is met
 
 ## Contributing
 

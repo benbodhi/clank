@@ -241,17 +241,12 @@ class ClankerBot {
     startHeartbeat() {
         setInterval(() => {
             const now = Date.now();
-            const minutesSinceLastEvent = (now - this.lastEventTime) / (1000 * 60);
-            const lastEventTimestamp = new Date(this.lastEventTime).toISOString();
+            const timeSinceLastEvent = now - this.lastEventTime;
             
-            // If no events received in 15 minutes, reinitialize
-            if (minutesSinceLastEvent > 15) {
-                console.log(`No events received since ${lastEventTimestamp}. Reinitializing services...`);
+            if (timeSinceLastEvent > 15 * 60 * 1000) { // 15 minutes
+                console.log(`[${new Date().toISOString()}] ⚠️ No events received in ${Math.floor(timeSinceLastEvent / 60000)} minutes`);
                 this.reinitializeServices();
             }
-
-            // Log health check
-            console.log(`Health check: Last event at ${lastEventTimestamp}`);
         }, 5 * 60 * 1000); // 5 minutes
     }
 }
