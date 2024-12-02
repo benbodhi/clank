@@ -9,7 +9,6 @@ const { ethers } = require('ethers');
  * @param {Object} tokenData - Token creation data
  * @param {Object} eventLog - Event log data
  * @param {Discord.Client} discord - Discord client instance
- * @param {ethers.Provider} provider - Ethers provider instance
  */
 async function sendDiscordMessage(tokenData, eventLog, discord) {
     try {
@@ -19,6 +18,12 @@ async function sendDiscordMessage(tokenData, eventLog, discord) {
         }
 
         const warpcastData = await getWarpcastUserData(tokenData.fid);
+        
+        if (warpcastData?.followerCount === 0) {
+            console.log(`Skipping notification for FID ${tokenData.fid} with 0 followers.`);
+            return;
+        }
+
         const embed = await createEmbed(tokenData, warpcastData);
         const content = createMessageContent(tokenData, warpcastData);
 
@@ -27,15 +32,6 @@ async function sendDiscordMessage(tokenData, eventLog, discord) {
         handleError(error, 'Discord Message');
         throw error;
     }
-}
-
-async function getDiscordChannel(discord) {
-    const channel = await discord.channels.fetch(process.env.DISCORD_CHANNEL_ID);
-    if (!channel) {
-        console.error('❌ Could not find Discord channel');
-        return null;
-    }
-    return channel;
 }
 
 function formatDeployerField(address) {
@@ -56,8 +52,38 @@ async function createEmbed(tokenData, warpcastData) {
             `| **[Photon](https://photon-base.tinyastro.io/en/lp/${tokenData.poolAddress})**` : 
             '';
 
+        // Determine embed color based on thresholds
+        let embedColor = '#0099ff'; // default blue
+
+        const fid = Number(tokenData.fid);
+        const followers = warpcastData?.followerCount || 0;
+
+        // FID colors (greens)
+        if (fid < config.fidThresholds.below1000) {
+            embedColor = '#00ff00'; // bright green
+        } else if (fid < config.fidThresholds.below5000) {
+            embedColor = '#00dd00'; // medium green
+        } else if (fid < config.fidThresholds.below10000) {
+            embedColor = '#00bb00'; // darker green
+        }
+
+        // Follower colors (purples) - override FID colors if higher threshold met
+        if (followers >= config.followerThresholds.over200000) {
+            embedColor = '#ff00ff'; // bright purple
+        } else if (followers >= config.followerThresholds.over100000) {
+            embedColor = '#dd00dd'; // medium purple
+        } else if (followers >= config.followerThresholds.over50000) {
+            embedColor = '#bb00bb'; // darker purple
+        } else if (followers >= config.followerThresholds.over20000) {
+            embedColor = '#990099'; // deep purple
+        } else if (followers >= config.followerThresholds.over10000) {
+            embedColor = '#770077'; // very deep purple
+        } else if (followers >= config.followerThresholds.over5000) {
+            embedColor = '#550055'; // darkest purple
+        }
+
         return new EmbedBuilder()
-            .setColor(Number(tokenData.fid) < config.fidThreshold ? '#00de34' : '#0099ff')
+            .setColor(embedColor)
             .setTitle('🔔 Clank Clank!')
             .addFields(
                 ...createEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData)
@@ -71,17 +97,37 @@ async function createEmbed(tokenData, warpcastData) {
 
 function createMessageContent(tokenData, warpcastData) {
     const messages = [];
+    const fid = Number(tokenData.fid);
     
-    // Low FID notification
-    if (Number(tokenData.fid) < config.fidThreshold) {
-        messages.push(`**<@&${process.env.LOW_FID_ROLE}> 👀**`);
-        messages.push(`**FID: ${tokenData.fid}**`);
+    // FID threshold notifications
+    if (fid < config.fidThresholds.below1000) {
+        messages.push(`**<@&${process.env.FID_BELOW_1000_ROLE}> 🔥**`);
+    } else if (fid < config.fidThresholds.below5000) {
+        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**`);
+    } else if (fid < config.fidThresholds.below10000) {
+        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**`);
     }
     
-    // High follower notification
-    if (warpcastData?.followerCount >= config.followerThreshold) {
-        messages.push(`**<@&${process.env.HIGH_FOLLOWER_ROLE}> 🔥**`);
-        messages.push(`**Followers: ${warpcastData.followerCount.toLocaleString()}**`);
+    // Follower threshold notifications
+    if (warpcastData?.followerCount) {
+        const followers = warpcastData.followerCount;
+        if (followers >= config.followerThresholds.over200000) {
+            messages.push(`**<@&${process.env.FOLLOWERS_OVER_200000_ROLE}> 🌟**`);
+        } else if (followers >= config.followerThresholds.over100000) {
+            messages.push(`**<@&${process.env.FOLLOWERS_OVER_100000_ROLE}> 🚀**`);
+        } else if (followers >= config.followerThresholds.over50000) {
+            messages.push(`**<@&${process.env.FOLLOWERS_OVER_50000_ROLE}> 💫**`);
+        } else if (followers >= config.followerThresholds.over20000) {
+            messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**`);
+        } else if (followers >= config.followerThresholds.over10000) {
+            messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**`);
+        } else if (followers >= config.followerThresholds.over5000) {
+            messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**`);
+        }
+    }
+    
+    if (messages.length > 0) {
+        messages.push(`**FID: ${tokenData.fid}${warpcastData ? ` | Followers: ${warpcastData.followerCount.toLocaleString()}` : ''}**`);
     }
     
     return messages.join('\n');

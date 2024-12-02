@@ -56,7 +56,7 @@ async function handleTokenCreated(args, provider, discord) {
             poolAddress
         };
 
-        await sendDiscordMessage(tokenData, event.log, discord, provider);
+        await sendDiscordMessage(tokenData, event.log, discord);
         console.log(`[${timestamp}] ✅ Discord notification sent successfully\n`);
 
     } catch (error) {

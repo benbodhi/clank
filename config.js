@@ -4,10 +4,22 @@
  */
 
 const config = {
-    /** Threshold for considering a FID as "low" */
-    fidThreshold: 10000,
-    /** Threshold for considering a user as "high followers" */
-    followerThreshold: 10000,
+    /** FID Thresholds for role notifications */
+    fidThresholds: {
+        below1000: 1000,
+        below5000: 5000,
+        below10000: 10000
+    },
+
+    /** Follower Thresholds for role notifications */
+    followerThresholds: {
+        over5000: 5000,
+        over10000: 10000,
+        over20000: 20000,
+        over50000: 50000,
+        over100000: 100000,
+        over200000: 200000
+    },
 
     /** Contract Addresses */
     contracts: {
@@ -57,6 +69,19 @@ const addressRegex = /^0x[a-fA-F0-9]{40}$/;
 Object.entries(config.contracts).forEach(([name, address]) => {
     if (!addressRegex.test(address)) {
         throw new Error(`Invalid ${name} contract address`);
+    }
+});
+
+// Validate thresholds
+Object.entries(config.fidThresholds).forEach(([name, value]) => {
+    if (typeof value !== 'number' || value <= 0) {
+        throw new Error(`Invalid ${name} FID threshold`);
+    }
+});
+
+Object.entries(config.followerThresholds).forEach(([name, value]) => {
+    if (typeof value !== 'number' || value <= 0) {
+        throw new Error(`Invalid ${name} follower threshold`);
     }
 });
 

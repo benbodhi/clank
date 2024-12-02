@@ -33,6 +33,7 @@ class ClankerBot {
             await this.initializeDiscord();
             await this.initializeProvider();
             this.setupEventListeners();
+            this.setupUncaughtHandlers();
             this.startHeartbeat();
         } catch (error) {
             handleError(error, 'Services Initialization');
@@ -43,15 +44,25 @@ class ClankerBot {
     }
 
     async cleanup(shouldExit = true) {
-        if (this.isShuttingDown) return;
+        // If already shutting down or completed shutdown, return immediately
+        if (this.isShuttingDown) {
+            console.log('Cleanup already in progress...');
+            return;
+        }
+        
         this.isShuttingDown = true;
-
         console.log('\nShutting down services...');
         
         try {
+            // Remove signal handlers first
+            ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
+                process.removeAllListeners(signal);
+            });
+            
             // Remove all listeners first
             if (this.clankerContract) {
                 this.clankerContract.removeAllListeners();
+                this.clankerContract = null;
             }
             
             if (this.provider) {
@@ -212,10 +223,9 @@ class ClankerBot {
                 await handleTokenCreated(args, this.provider, this.discord);
             });
         }
+    }
 
-        process.on('SIGINT', () => this.cleanup());
-        process.on('SIGTERM', () => this.cleanup());
-        
+    setupUncaughtHandlers() {
         // Handle uncaught errors
         process.on('uncaughtException', (error) => {
             handleError(error, 'Uncaught Exception');
@@ -229,7 +239,6 @@ class ClankerBot {
     }
 
     startHeartbeat() {
-        // Check connection health every 5 minutes
         setInterval(() => {
             const now = Date.now();
             const minutesSinceLastEvent = (now - this.lastEventTime) / (1000 * 60);
@@ -243,7 +252,6 @@ class ClankerBot {
 
             // Log health check
             console.log(`Health check: Last event at ${lastEventTimestamp}`);
-            
         }, 5 * 60 * 1000); // 5 minutes
     }
 }

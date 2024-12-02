@@ -49,18 +49,27 @@ project/
 
 ## Environment Variables
 
-Copy the `.env.example` file to `.env` and fill in your values:
+The bot requires several environment variables to be set:
 
-```
-cp .env.example .env
-```
-
-Required variables:
+### Required Core Variables
 - `DISCORD_TOKEN`: Your Discord bot token
 - `DISCORD_CHANNEL_ID`: Channel ID for notifications
 - `ALCHEMY_API_KEY`: Alchemy API key for Base network
-- `LOW_FID_ROLE`: Discord role ID to ping for low FID tokens
-- `HIGH_FOLLOWER_ROLE`: Discord role ID to ping for high follower accounts
+
+### FID Role Variables
+- `FID_BELOW_1000_ROLE`: Role ID for FIDs under 1,000
+- `FID_BELOW_5000_ROLE`: Role ID for FIDs under 5,000
+- `FID_BELOW_10000_ROLE`: Role ID for FIDs under 10,000
+
+### Follower Role Variables
+- `FOLLOWERS_OVER_5000_ROLE`: Role ID for accounts with 5,000+ followers
+- `FOLLOWERS_OVER_10000_ROLE`: Role ID for accounts with 10,000+ followers
+- `FOLLOWERS_OVER_20000_ROLE`: Role ID for accounts with 20,000+ followers
+- `FOLLOWERS_OVER_50000_ROLE`: Role ID for accounts with 50,000+ followers
+- `FOLLOWERS_OVER_100000_ROLE`: Role ID for accounts with 100,000+ followers
+- `FOLLOWERS_OVER_200000_ROLE`: Role ID for accounts with 200,000+ followers
+
+Copy `.env.example` to `.env` and fill in your values.
 
 ## Installation
 
@@ -128,28 +137,56 @@ The bot can be deployed on platforms like Railway:
    - Copy this token - you'll need it for your `.env` file
    - Keep this token secret and never share it
 
-3. **Invite Bot to Your Server**
-   - Go to the "OAuth2" section, then "URL Generator"
+3. **Create Required Roles**
+   Create the following roles in your Discord server:
+   
+   FID-based roles:
+   - Role for FIDs below 1,000
+   - Role for FIDs below 5,000
+   - Role for FIDs below 10,000
+   
+   Follower-based roles:
+   - Role for 5,000+ followers
+   - Role for 10,000+ followers
+   - Role for 20,000+ followers
+   - Role for 50,000+ followers
+   - Role for 100,000+ followers
+   - Role for 200,000+ followers
+
+4. **Get Role IDs**
+   - Enable Developer Mode in Discord (User Settings > App Settings > Advanced > Developer Mode)
+   - Right-click each role and click "Copy ID"
+   - Add these IDs to your `.env` file with their corresponding variable names
+
+5. **Invite Bot to Server**
+   - Go to OAuth2 > URL Generator
    - Select the following scopes:
      - `bot`
      - `applications.commands`
    - Select the following bot permissions:
      - `Read Messages/View Channels`
+     - `Read Message History`
      - `Send Messages`
      - `Embed Links`
-     - `Read Message History`
+     - `Mention Everyone` (for role pings)
    - Copy the generated URL and open it in a browser
    - Select your server and authorize the bot
 
-4. **Get Channel ID**
-   - In Discord, enable Developer Mode (Settings → App Settings → Advanced → Developer Mode)
-   - Right-click the channel where you want notifications and click "Copy Channel ID"
-   - Add this ID to your `.env` file
+6. **Configure Channel**
+   - Create or select a channel for notifications
+   - Right-click the channel and copy the ID
+   - Add this ID to your environment variables
 
-5. **Set Up Role for Low FID Alerts** (Optional)
-   - Create a new role in your Discord server
-   - Right-click the role and click "Copy Role ID"
-   - Add this ID to your `.env` file as `LOW_FID_ROLE`
+7. **Bot Permissions**
+   Ensure the bot has the following permissions in the notification channel:
+   - View Channel
+   - Send Messages
+   - Embed Links
+   - Mention Roles
+
+8. **Role Hierarchy**
+   - Ensure the bot's role is higher than all notification roles in the server settings
+   - This allows the bot to mention these roles in messages
 
 ## MEE6 Role Self-Service Setup
 
