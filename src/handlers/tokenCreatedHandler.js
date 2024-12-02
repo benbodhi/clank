@@ -128,6 +128,7 @@ async function getPoolAddress(event, provider) {
 
 async function getTokenImage(tokenAddress, provider) {
     try {
+        console.log(`Attempting to fetch image for token: ${tokenAddress}`);
         const tokenContract = new ethers.Contract(
             tokenAddress,
             config.abis.token,
@@ -135,13 +136,16 @@ async function getTokenImage(tokenAddress, provider) {
         );
 
         const imageUrl = await tokenContract.image();
+        console.log('Raw image URL from contract:', imageUrl);
         
         // Basic URL validation
         if (imageUrl && 
             typeof imageUrl === 'string' && 
             (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+            console.log('Valid image URL found:', imageUrl);
             return imageUrl;
         }
+        console.log('Image URL validation failed - URL must start with http:// or https://');
         return null;
     } catch (error) {
         handleError(error, 'Token Image Fetch');
