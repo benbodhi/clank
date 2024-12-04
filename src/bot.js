@@ -168,18 +168,24 @@ class ClankerBot {
             // Setup WebSocket error handling after provider is ready
             if (this.provider._websocket) {
                 this.provider._websocket.on('error', (error) => {
+                    console.log(`[${new Date().toISOString()}] 🔴 WebSocket error detected`);
                     handleError(error, 'WebSocket Provider');
                     if (!this.isReconnecting) {
                         this.reconnectProvider();
                     }
                 });
 
-                this.provider._websocket.on('close', () => {
+                this.provider._websocket.on('close', (code, reason) => {
                     const timestamp = new Date().toISOString();
-                    console.log(`[${timestamp}] ⚠️ WebSocket closed, attempting to reconnect...`);
+                    console.log(`[${timestamp}] 🔴 WebSocket closed with code ${code}${reason ? `: ${reason}` : ''}`);
                     if (!this.isReconnecting) {
                         this.reconnectProvider();
                     }
+                });
+
+                // Add connection open event
+                this.provider._websocket.on('open', () => {
+                    console.log(`[${new Date().toISOString()}] 🟢 WebSocket connection opened`);
                 });
             }
 
