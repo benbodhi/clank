@@ -32,7 +32,7 @@ class ClankerBot {
         try {
             await this.initializeDiscord();
             await this.initializeProvider();
-            this.setupEventListeners();
+            await this.setupEventListeners();
             this.setupUncaughtHandlers();
             this.startHeartbeat();
         } catch (error) {
@@ -216,12 +216,24 @@ class ClankerBot {
         }
     }
 
-    setupEventListeners() {
+    async setupEventListeners() {
         if (this.clankerContract) {
+            console.log(`[${new Date().toISOString()}] 🎯 Setting up event listeners...`);
+            
+            // Remove any existing listeners first
+            this.clankerContract.removeAllListeners('TokenCreated');
+            
             this.clankerContract.on('TokenCreated', async (...args) => {
+                console.log(`[${new Date().toISOString()}] 📥 Raw event received`);
                 this.lastEventTime = Date.now();
                 await handleTokenCreated(args, this.provider, this.discord);
             });
+            
+            // Verify listener is attached
+            const listenerCount = await this.clankerContract.listenerCount('TokenCreated');
+            console.log(`[${new Date().toISOString()}] ✅ TokenCreated listeners attached: ${listenerCount}`);
+        } else {
+            console.log(`[${new Date().toISOString()}] ⚠️ Cannot setup event listeners - contract not initialized`);
         }
     }
 
