@@ -239,15 +239,27 @@ class ClankerBot {
     }
 
     startHeartbeat() {
-        setInterval(() => {
-            const now = Date.now();
-            const timeSinceLastEvent = now - this.lastEventTime;
-            
-            if (timeSinceLastEvent > 15 * 60 * 1000) { // 15 minutes
-                console.log(`[${new Date().toISOString()}] ⚠️ No events received in ${Math.floor(timeSinceLastEvent / 60000)} minutes`);
-                this.reinitializeServices();
+        setInterval(async () => {
+            try {
+                const now = Date.now();
+                const timeSinceLastEvent = now - this.lastEventTime;
+                
+                // Log if no events for a while (but this is normal)
+                if (timeSinceLastEvent > 15 * 60 * 1000) { // 15 minutes
+                    console.log(`[${new Date().toISOString()}] ℹ️ No events in ${Math.floor(timeSinceLastEvent / 60000)} minutes - Connection healthy`);
+                }
+
+                // Simple connection check
+                if (this.provider && !this.isReconnecting) {
+                    await this.provider.getBlockNumber(); // Light request to verify connection
+                }
+            } catch (error) {
+                console.log(`[${new Date().toISOString()}] ⚠️ Connection check failed, attempting to reconnect...`);
+                if (!this.isReconnecting) {
+                    await this.reconnectProvider();
+                }
             }
-        }, 5 * 60 * 1000); // 5 minutes
+        }, 5 * 60 * 1000); // Check every 5 minutes
     }
 }
 
