@@ -1,85 +1,442 @@
+process.env.DEBUG = 'ethers:*';
+
+// Load environment variables first
+require('dotenv').config();
+
+// Validate required environment variables
+if (!process.env.DISCORD_TOKEN || 
+    !process.env.ALCHEMY_API_KEY || 
+    !process.env.DISCORD_CLANKER_CHANNEL_ID || 
+    !process.env.DISCORD_LARRY_CHANNEL_ID) {
+    console.error('Missing required environment variables: DISCORD_TOKEN, ALCHEMY_API_KEY, DISCORD_CLANKER_CHANNEL_ID, or DISCORD_LARRY_CHANNEL_ID');
+    process.exit(1);
+}
+
+// Third-party dependencies
 const ethers = require('ethers');
 const { Client, GatewayIntentBits } = require('discord.js');
-require('dotenv').config();
-const config = require('../config');
-const { handleTokenCreated } = require('./handlers/tokenCreatedHandler');
+
+// Local imports: config first
+const { settings } = require('./config');
+
+// Local imports: handlers
 const { handleError } = require('./handlers/errorHandler');
+const { handleClankerToken } = require('./handlers/clankerTokenHandler');
+const { handleLarryToken } = require('./handlers/larryTokenHandler');
+const { handleLarryPartyCreated } = require('./handlers/larryPartyCreatedHandler');
+const { handleLarryContributed } = require('./handlers/larryContributedHandler');
+const { handlePresaleFinalized, handlePresaleRefunded } = require('./handlers/larryPresaleEventHandlers');
+
+// Local imports: contract helpers
+const LarryContractHelper = require('./contracts/helpers/LarryContractHelper');
+const ClankerContractHelper = require('./contracts/helpers/ClankerContractHelper');
+
+const logger = require('./utils/logger');
+const { getActiveCrowdfunds, addCrowdfund, updateCrowdfundStatus } = require('./utils/larryCrowdfundStore');
 
 class ClankerBot {
     constructor() {
-        this.isShuttingDown = false;
-        this.initCount = 0;
-        this.lastEventTime = Date.now();
+        this.provider = null;
+        this.discord = null;
         this.isReconnecting = false;
+        this.isShuttingDown = false;
+        this.lastEventTime = Date.now();
+        this.healthCheckInterval = null;
+        this.reconnectAttempts = 0;
+        this.initCount = 0;
+        this.activeCrowdfundListeners = new Map();
         
         this.setupCleanupHandlers();
-        this.initializeServices();
+        this.initialize();
     }
 
     setupCleanupHandlers() {
-        // Ensure clean shutdown on various signals
         ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
             process.on(signal, () => {
-                console.log(`\n${signal} received. Cleaning up...`);
+                logger.info(`\n${signal} received. Cleaning up...`);
                 this.cleanup(true);
             });
         });
     }
 
-    async initializeServices() {
+    async initialize() {
         if (this.isShuttingDown) return;
         
         try {
+            logger.section('🚀 Initializing Bot');
+            logger.detail('Starting WebSocket Provider...');
+            
+            // Initialize provider with WebSocket
+            this.provider = new ethers.WebSocketProvider(
+                `wss://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
+                {
+                    name: 'base',
+                    chainId: 8453
+                }
+            );
+
+            await this.provider.ready;
+            logger.detail('Provider Connected');
+
+            // Initialize Discord client
             await this.initializeDiscord();
-            await this.initializeProvider();
+            logger.detail('Discord client ready');
+            logger.sectionEnd();
+
+            // Initialize contract helpers
+            logger.section('🔄 Initializing Contract Monitoring');
+            this.larryContracts = new LarryContractHelper(this.provider);
+            this.clankerContracts = new ClankerContractHelper(this.provider);
+            
+            logger.detail('Clanker Factory', this.clankerContracts.clankerFactory.target);
+            logger.detail('Larry Factory', this.larryContracts.larryFactory.target);
+            logger.detail('Larry Party Factory', this.larryContracts.partyFactory.target);
+            logger.sectionEnd();
+
+            // Verify contracts
+            logger.section('🔍 Verifying Contract Deployments');
+            await this.verifyContracts();
+            logger.detail('✅ All contracts verified successfully');
+            logger.sectionEnd();
+
+            // Set up event listeners
+            logger.section('🎯 Setting up Event Listeners');
             await this.setupEventListeners();
-            this.setupUncaughtHandlers();
-            this.startHeartbeat();
+            logger.detail('Larry Factory Listeners', '1');
+            logger.detail('Clanker Factory Listeners', '1');
+            logger.sectionEnd();
+
+            // Restore crowdfund listeners
+            logger.section('🔄 Restoring Crowdfund Listeners');
+            await this.restoreActiveCrowdfundListeners();
+            logger.sectionEnd();
+
+            // Start health checks and ping/pong
+            this.startHealthCheck();
+            this.startPingPong();
+
+            logger.section('🚀 Bot Initialization Complete');
+            logger.detail('👀 We are watching...');
+            logger.sectionEnd();
+
+            this.initCount = 0; // Reset init count on successful initialization
+
         } catch (error) {
-            handleError(error, 'Services Initialization');
-            if (!this.isReconnecting) {
-                setTimeout(() => this.initializeServices(), 30000);
+            logger.error(`Initialization error: ${error.message}`);
+            console.error('Full error:', error);
+            
+            if (this.initCount < MAX_RETRIES) {
+                const delay = Math.min(1000 * Math.pow(2, this.initCount), 30000);
+                logger.info(`Retrying initialization in ${delay}ms (attempt ${this.initCount}/${MAX_RETRIES})`);
+                setTimeout(() => this.initialize(), delay);
+            } else {
+                logger.error(`Failed to initialize after ${MAX_RETRIES} attempts`);
+                process.exit(1);
+            }
+        }
+    }
+
+    async initializeDiscord() {
+        return new Promise((resolve, reject) => {
+            this.discord = new Client({
+                intents: [
+                    GatewayIntentBits.Guilds,
+                    GatewayIntentBits.GuildMessages,
+                ]
+            });
+            
+            this.discord.once('ready', () => {
+                resolve();
+            });
+
+            this.discord.on('error', (error) => {
+                handleError(error, 'Discord Client');
+                if (!this.isReconnecting) {
+                    this.handleDisconnect();
+                }
+            });
+            
+            this.discord.login(process.env.DISCORD_TOKEN).catch(reject);
+        });
+    }
+
+    async verifyContracts() {
+        const contractsToVerify = [
+            ['Clanker Factory', this.clankerContracts.clankerFactory],
+            ['Larry Factory', this.larryContracts.larryFactory],
+            ['Larry Party Factory', this.larryContracts.partyFactory]
+        ];
+
+        for (const [name, contract] of contractsToVerify) {
+            const code = await this.provider.getCode(contract.target);
+            if (code === '0x' || code.length < 10) {
+                throw new Error(`${name} contract not found or invalid at ${contract.target}`);
+            }
+            logger.detail(`${name} verified`, contract.target);
+        }
+    }
+
+    async setupEventListeners() {
+        // Setup Larry Factory listeners
+        this.larryContracts.larryFactory.on('ERC20LaunchCrowdfundCreated', 
+            async (creator, crowdfund, party, crowdfundOpts, partyOpts, tokenOpts, event) => {
+            try {
+                this.lastEventTime = Date.now(); // Update last event time
+                await handleLarryPartyCreated({
+                    creator,
+                    crowdfund,
+                    party,
+                    crowdfundOpts,
+                    partyOpts,
+                    tokenOpts,
+                    transactionHash: event.log.transactionHash,
+                    provider: this.provider,
+                    discord: this.discord
+                });
+            } catch (error) {
+                handleError(error, 'Larry Factory Event Handler');
+            }
+        });
+
+        // Setup Clanker Factory listeners
+        this.clankerContracts.clankerFactory.on('TokenCreated', 
+            async (tokenAddress, lpNftId, deployer, fid, name, symbol, supply, lockerAddress, castHash, event) => {
+            try {
+                this.lastEventTime = Date.now(); // Update last event time
+                await handleClankerToken({
+                    tokenAddress,
+                    lpNftId,
+                    deployer,
+                    fid,
+                    name,
+                    symbol,
+                    supply,
+                    lockerAddress,
+                    castHash,
+                    event,
+                    provider: this.provider,
+                    discord: this.discord
+                });
+            } catch (error) {
+                handleError(error, 'Clanker Factory Event Handler');
+            }
+        });
+    }
+
+    async restoreActiveCrowdfundListeners() {
+        const activeCrowdfunds = await getActiveCrowdfunds();
+        if (activeCrowdfunds.length > 0) {
+            logger.detail('Active Crowdfunds', activeCrowdfunds.length);
+            for (const { address } of activeCrowdfunds) {
+                await this.setupCrowdfundListener(address);
+            }
+        } else {
+            logger.detail('No active crowdfunds found');
+        }
+    }
+
+    async setupCrowdfundListener(address) {
+        const crowdfundContract = new ethers.Contract(
+            address,
+            require('./contracts/abis/larry/ERC20LaunchCrowdfundImpl.json'),
+            this.provider
+        );
+
+        // Add to active listeners map before setting up listeners
+        this.activeCrowdfundListeners.set(address, crowdfundContract);
+
+        // Set up contribution listener
+        crowdfundContract.on('Contributed', async (sender, contributor, amount, delegate, event) => {
+            try {
+                await handleLarryContributed(event, this.provider, this.discord);
+            } catch (error) {
+                handleError(error, 'Larry Contribution Event Handler');
+            }
+        });
+
+        // Set up finalize listener
+        crowdfundContract.on('Finalized', async (event) => {
+            try {
+                await handlePresaleFinalized(event, this.provider, this.discord);
+                await this.removeCrowdfundListener(address);
+            } catch (error) {
+                handleError(error, 'Presale Finalized Event Handler');
+            }
+        });
+
+        // Set up refund listener
+        crowdfundContract.on('Refunded', async (event) => {
+            try {
+                await handlePresaleRefunded(event, this.provider, this.discord);
+                await this.removeCrowdfundListener(address);
+            } catch (error) {
+                handleError(error, 'Presale Refunded Event Handler');
+            }
+        });
+    }
+
+    async removeCrowdfundListener(address) {
+        const contract = this.activeCrowdfundListeners.get(address);
+        if (contract) {
+            contract.removeAllListeners();
+            this.activeCrowdfundListeners.delete(address);
+            logger.detail('Removed Listeners', address);
+        }
+    }
+
+    setupUncaughtHandlers() {
+        process.on('uncaughtException', (error) => {
+            handleError(error, 'Uncaught Exception');
+            if (!this.isShuttingDown) {
+                this.handleDisconnect();
+            }
+        });
+
+        process.on('unhandledRejection', (error) => {
+            handleError(error, 'Unhandled Rejection');
+            if (!this.isShuttingDown) {
+                this.handleDisconnect();
+            }
+        });
+    }
+
+    startHealthCheck() {
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval);
+        }
+
+        let lastLogTime = Date.now();
+
+        this.healthCheckInterval = setInterval(async () => {
+            if (this.isShuttingDown || this.isReconnecting) return;
+
+            const timeSinceLastEvent = Date.now() - this.lastEventTime;
+            const minutesSinceLastEvent = Math.round(timeSinceLastEvent / 60000);
+            
+            // Only log every 15 minutes
+            const timeSinceLastLog = Date.now() - lastLogTime;
+            if (timeSinceLastLog >= 15 * 60 * 1000) {
+                logger.section('🏥 Health Check');
+                logger.detail('Status', 'Connection healthy');
+                logger.detail('Time Since Last Event', minutesSinceLastEvent === 0 ? 
+                    'Less than a minute' : 
+                    `${minutesSinceLastEvent} minute${minutesSinceLastEvent === 1 ? '' : 's'}`
+                );
+                logger.sectionEnd();
+                lastLogTime = Date.now();
+            }
+
+            // Check connection if no events in 5 minutes
+            if (timeSinceLastEvent > 5 * 60 * 1000) {
+                try {
+                    await this.provider.getBlockNumber();
+                } catch (error) {
+                    logger.error('Connection check failed:', error.message);
+                    await this.handleDisconnect();
+                }
+            }
+        }, 60 * 1000); // Check every minute but only log every 15
+    }
+
+    async handleDisconnect() {
+        if (this.isReconnecting || this.isShuttingDown) return;
+        
+        this.isReconnecting = true;
+        this.reconnectAttempts++;
+
+        logger.warn('Connection lost, attempting to reconnect...');
+
+        try {
+            // Store current listeners before cleanup
+            const currentListeners = new Map(this.activeCrowdfundListeners);
+            
+            await this.cleanup(false);
+            this.isShuttingDown = false;
+            
+            // Wait with exponential backoff
+            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            await this.initialize();
+            
+            // Restore previous listeners
+            for (const [address] of currentListeners) {
+                await this.setupCrowdfundListener(address);
+            }
+            
+            this.isReconnecting = false;
+            this.reconnectAttempts = 0;
+            logger.info('Successfully reconnected and restored listeners');
+        } catch (error) {
+            this.isReconnecting = false;
+            handleError(error, 'Reconnection Failed');
+            
+            if (this.reconnectAttempts > 5) {
+                logger.error('Too many reconnection attempts, exiting...');
+                await this.cleanup(true);
+            } else {
+                setTimeout(() => this.handleDisconnect(), 5000);
             }
         }
     }
 
     async cleanup(shouldExit = true) {
-        // If already shutting down or completed shutdown, return immediately
         if (this.isShuttingDown) {
-            console.log('Cleanup already in progress...');
+            logger.info('Cleanup already in progress...');
             return;
         }
         
         this.isShuttingDown = true;
-        console.log('\nShutting down services...');
+        logger.info('\nShutting down services...');
         
         try {
-            // Remove signal handlers first
+            // Remove signal handlers
             ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
                 process.removeAllListeners(signal);
             });
             
-            // Remove all listeners first
-            if (this.clankerContract) {
-                this.clankerContract.removeAllListeners();
-                this.clankerContract = null;
+            // Clean up crowdfund listeners
+            for (const [address, contract] of this.activeCrowdfundListeners) {
+                contract.removeAllListeners();
+                this.activeCrowdfundListeners.delete(address);
             }
             
+            // Clean up factory listeners
+            if (this.clankerContracts?.clankerFactory) {
+                this.clankerContracts.clankerFactory.removeAllListeners();
+            }
+            
+            if (this.larryContracts?.larryFactory) {
+                this.larryContracts.larryFactory.removeAllListeners();
+            }
+            
+            // Clean up provider
             if (this.provider) {
                 this.provider.removeAllListeners();
                 await this.provider.destroy();
                 this.provider = null;
             }
 
+            // Clean up Discord
             if (this.discord) {
                 await this.discord.destroy();
                 this.discord = null;
             }
 
+            // Clean up intervals
+            if (this.healthCheckInterval) {
+                clearInterval(this.healthCheckInterval);
+                this.healthCheckInterval = null;
+            }
+
+            // Remove uncaught handlers
+            process.removeAllListeners('uncaughtException');
+            process.removeAllListeners('unhandledRejection');
+
             if (shouldExit) {
                 // Force exit after 3 seconds if normal exit fails
                 setTimeout(() => {
-                    console.log('Forcing exit...');
+                    logger.info('Forcing exit...');
                     process.exit(1);
                 }, 3000);
                 
@@ -93,192 +450,22 @@ class ClankerBot {
         }
     }
 
-    async reinitializeServices() {
-        if (this.isShuttingDown) return;
-        
-        console.log('Reinitializing all services...');
-        try {
-            await this.cleanup(false);
-            this.isShuttingDown = false;
-            this.initCount = 0;
-            await this.initializeServices();
-        } catch (error) {
-            handleError(error, 'Services Reinitialization');
-            // Wait 30 seconds before trying again
-            setTimeout(() => this.reinitializeServices(), 30000);
-        }
-    }
-
-    initializeDiscord() {
-        this.discord = new Client({
-            intents: [
-                GatewayIntentBits.Guilds,
-                GatewayIntentBits.GuildMessages,
-            ]
-        });
-        
-        this.discord.login(process.env.DISCORD_TOKEN);
-        
-        this.discord.once('ready', () => {
-            const timestamp = new Date().toISOString();
-            console.log(`[${timestamp}] 🤖 Discord bot is ready!`);
-            console.log(`[${timestamp}] 👀 Listening for new token deployments from contract at address: ${config.contracts.clanker}`);
-        });
-
-        this.discord.on('error', (error) => {
-            handleError(error, 'Discord Client');
-            this.reinitializeDiscord();
-        });
-    }
-
-    async reinitializeDiscord() {
-        console.log('Attempting to reinitialize Discord connection...');
-        try {
-            await this.discord.destroy();
-            await this.initializeDiscord();
-        } catch (error) {
-            handleError(error, 'Discord Reinitialization');
-            // Wait 30 seconds before trying again
-            setTimeout(() => this.reinitializeDiscord(), 30000);
-        }
-    }
-
-    async initializeProvider() {
-        if (this.isReconnecting) return;
-        
-        try {
-            if (this.provider) {
-                this.provider.removeAllListeners();
-                await this.provider.destroy();
+    startPingPong() {
+        // Send a ping every 30 seconds
+        setInterval(() => {
+            if (this.provider?.websocket?.readyState === 1) { // 1 = OPEN
+                this.provider.websocket.ping();
             }
+        }, 30000);
 
-            this.provider = new ethers.WebSocketProvider(
-                `wss://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
-            );
-            
-            // Wait for provider to be ready
-            await this.provider.ready;
-            
-            this.clankerContract = new ethers.Contract(
-                config.contracts.clanker, 
-                config.abis.clanker, 
-                this.provider
-            );
-
-            // Setup WebSocket error handling after provider is ready
-            if (this.provider._websocket) {
-                this.provider._websocket.on('error', (error) => {
-                    console.log(`[${new Date().toISOString()}] 🔴 WebSocket error detected`);
-                    handleError(error, 'WebSocket Provider');
-                    if (!this.isReconnecting) {
-                        this.reconnectProvider();
-                    }
-                });
-
-                this.provider._websocket.on('close', (code, reason) => {
-                    const timestamp = new Date().toISOString();
-                    console.log(`[${timestamp}] 🔴 WebSocket closed with code ${code}${reason ? `: ${reason}` : ''}`);
-                    if (!this.isReconnecting) {
-                        this.reconnectProvider();
-                    }
-                });
-
-                // Add connection open event
-                this.provider._websocket.on('open', () => {
-                    console.log(`[${new Date().toISOString()}] 🟢 WebSocket connection opened`);
-                });
-            }
-
-            this.provider.on('block', () => {
-                this.lastEventTime = Date.now();
+        // Handle pong responses
+        if (this.provider?.websocket) {
+            this.provider.websocket.on('pong', () => {
+                this.lastEventTime = Date.now(); // Update last event time
             });
-
-            const timestamp = new Date().toISOString();
-            console.log(`[${timestamp}] 🔌 WebSocket Provider initialized successfully`);
-        } catch (error) {
-            handleError(error, 'Provider Initialization');
-            if (!this.isReconnecting) {
-                this.reconnectProvider();
-            }
         }
-    }
-
-    async reconnectProvider() {
-        if (this.isReconnecting || this.isShuttingDown) return;
-        
-        this.isReconnecting = true;
-        const timestamp = new Date().toISOString();
-        console.log(`[${timestamp}] 🔄 Attempting to reconnect WebSocket...`);
-        
-        try {
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-            await this.initializeProvider();
-            this.isReconnecting = false;
-        } catch (error) {
-            handleError(error, 'Provider Reconnection');
-            this.isReconnecting = false;
-            // Try again in 30 seconds
-            setTimeout(() => this.reconnectProvider(), 30000);
-        }
-    }
-
-    async setupEventListeners() {
-        if (this.clankerContract) {
-            console.log(`[${new Date().toISOString()}] 🎯 Setting up event listeners...`);
-            
-            // Remove any existing listeners first
-            this.clankerContract.removeAllListeners('TokenCreated');
-            
-            this.clankerContract.on('TokenCreated', async (...args) => {
-                console.log(`[${new Date().toISOString()}] 📥 Raw event received`);
-                this.lastEventTime = Date.now();
-                await handleTokenCreated(args, this.provider, this.discord);
-            });
-            
-            // Verify listener is attached
-            const listenerCount = await this.clankerContract.listenerCount('TokenCreated');
-            console.log(`[${new Date().toISOString()}] ✅ TokenCreated listeners attached: ${listenerCount}`);
-        } else {
-            console.log(`[${new Date().toISOString()}] ⚠️ Cannot setup event listeners - contract not initialized`);
-        }
-    }
-
-    setupUncaughtHandlers() {
-        // Handle uncaught errors
-        process.on('uncaughtException', (error) => {
-            handleError(error, 'Uncaught Exception');
-            this.reinitializeServices();
-        });
-
-        process.on('unhandledRejection', (error) => {
-            handleError(error, 'Unhandled Rejection');
-            this.reinitializeServices();
-        });
-    }
-
-    startHeartbeat() {
-        setInterval(async () => {
-            try {
-                const now = Date.now();
-                const timeSinceLastEvent = now - this.lastEventTime;
-                
-                // Log if no events for a while (but this is normal)
-                if (timeSinceLastEvent > 15 * 60 * 1000) { // 15 minutes
-                    console.log(`[${new Date().toISOString()}] ℹ️ No events in ${Math.floor(timeSinceLastEvent / 60000)} minutes - Connection healthy`);
-                }
-
-                // Simple connection check
-                if (this.provider && !this.isReconnecting) {
-                    await this.provider.getBlockNumber(); // Light request to verify connection
-                }
-            } catch (error) {
-                console.log(`[${new Date().toISOString()}] ⚠️ Connection check failed, attempting to reconnect...`);
-                if (!this.isReconnecting) {
-                    await this.reconnectProvider();
-                }
-            }
-        }, 5 * 60 * 1000); // Check every 5 minutes
     }
 }
 
+// Start the bot
 new ClankerBot(); 

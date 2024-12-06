@@ -1,0 +1,14 @@
+[
+    {
+        "anonymous": false,
+        "inputs": [
+            { "indexed": true, "name": "token0", "type": "address" },
+            { "indexed": true, "name": "token1", "type": "address" },
+            { "indexed": true, "name": "fee", "type": "uint24" },
+            { "indexed": false, "name": "tickSpacing", "type": "int24" },
+            { "indexed": false, "name": "pool", "type": "address" }
+        ],
+        "name": "PoolCreated",
+        "type": "event"
+    }
+] 

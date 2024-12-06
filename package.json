@@ -1,11 +1,10 @@
 {
-  "name": "clanker-bot",
+  "name": "clank",
   "version": "1.0.0",
-  "description": "Listens for new tokens and sends message in discord",
+  "description": "Discord bot monitoring Base token deployments through Clanker and Larry",
   "main": "src/bot.js",
   "scripts": {
-    "start": "node src/bot.js",
-    "install-prod": "npm install --omit=dev"
+    "start": "node src/bot.js"
   },
   "keywords": [
     "discord",
@@ -21,13 +20,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Benbodhi/clanker-bot.git"
+    "url": "https://github.com/benbodhi/clank.git"
   },
   "license": "MIT",
   "dependencies": {
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
-    "ethers": "^6.13.4"
+    "ethers": "^6.13.4",
+    "winston": "^3.17.0"
   },
   "engines": {
     "node": ">=18.0.0"

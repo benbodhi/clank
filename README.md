@@ -1,10 +1,12 @@
-# Clanker Bot
+# Clank
 
-A Discord bot that monitors new token deployments on Base through the Clanker contract and sends notifications to a specified Discord channel.
+A Discord bot that monitors new token deployments on Base through both Clanker and Larry contracts, sending notifications to specified Discord channels.
 
 ## Features
 
-- 🔍 Monitors new token deployments in real-time
+- 🔍 Monitors new token deployments in real-time through:
+  - Clanker Factory
+  - Larry Party Factory
 - 📊 Provides detailed token information including:
   - Token name and symbol
   - Contract address with links (Basescan, Dexscreener, Uniswap, Photon)
@@ -14,11 +16,27 @@ A Discord bot that monitors new token deployments on Base through the Clanker co
   - LP NFT ID with Uniswap position link
   - Launch cast link
   - Token images (configurable)
-- 🏷️ Role pinging for low FID tokens (configurable threshold)
-- 🔄 Automatic reconnection with exponential backoff
-- 💪 Resilient error handling and logging
-- 🛑 Graceful shutdown handling
-- 🚫 Avoids sending notifications if deployer has 0 followers on Farcaster
+- 🎉 Larry Party Features:
+  - Monitors new party creations
+  - Tracks contributions in real-time
+  - Updates original party messages with contribution info
+  - Shows party progress and deadlines
+- 🏷️ Role pinging system:
+  - Low FID notifications (configurable threshold)
+  - High follower count notifications
+  - Multiple threshold levels for fine-grained alerts
+- 💾 Persistent Storage:
+  - JSON-based message tracking
+  - Contribution history
+  - Automatic data directory management
+- 🔄 Reliability Features:
+  - Automatic WebSocket reconnection with exponential backoff
+  - Resilient error handling and logging
+  - Graceful shutdown handling
+  - Service health monitoring (checks every minute, logs every 15 minutes)
+- 🧠 Smart Filtering:
+  - Avoids notifications for 0-follower accounts
+  - Configurable thresholds for notifications
 
 ## Prerequisites
 
@@ -33,30 +51,92 @@ A Discord bot that monitors new token deployments on Base through the Clanker co
 ```
 project/
 ├── src/
+│   ├── config/
+│   │   ├── index.js
+│   │   └── settings.js
+│   ├── contracts/
+│   │   ├── abis/
+│   │   │   ├── clanker/
+│   │   │   │   └── Factory.json
+│   │   │   ├── larry/
+│   │   │   │   ├── CrowdfundFactoryImpl.json
+│   │   │   │   ├── ERC20CreatorV3Impl.json
+│   │   │   │   ├── ERC20LaunchCrowdfundImpl.json
+│   │   │   │   ├── PartyFactory.json
+│   │   │   │   └── PartyImpl.json
+│   │   │   ├── token/
+│   │   │   │   └── Token.json
+│   │   │   └── uniswap/
+│   │   │       └── Factory.json
+│   │   ├── helpers/
+│   │   │   ├── ClankerContractHelper.js
+│   │   │   └── LarryContractHelper.js
+│   │   ├── addresses.json
+│   │   └── utils.js
+│   ├── data/
+│   │   └── crowdfundStore.json
 │   ├── handlers/
-│   │   ├── tokenCreatedHandler.js
-│   │   └── errorHandler.js
+│   │   ├── clankerTokenHandler.js
+│   │   ├── errorHandler.js
+│   │   ├── larryContributedHandler.js
+│   │   ├── larryPartyCreatedHandler.js
+│   │   ├── larryPresaleEventHandler.js
+│   │   └── larryTokenHandler.js
 │   ├── services/
 │   │   └── warpcastResolver.js
 │   ├── utils/
-│   │   └── discordMessenger.js
+│   │   ├── discordMessenger.js
+│   │   ├── larryCrowdfundStore.js
+│   │   └── logger.js
 │   └── bot.js
-├── config.js
-├── package.json
 ├── .env
 ├── .env.example
 ├── .gitignore
+├── package-lock.json
+├── package.json
 └── README.md
 ```
+
+## Configuration
+
+The bot's configuration is split into multiple files:
+
+### Application Settings
+- `src/config/settings.js`: Core application settings including:
+  - FID Thresholds for role notifications
+  - Follower Thresholds for role notifications
+  - Features toggles (e.g., `displayImages`)
+  - Larry Party configuration options
+
+### Contract Configuration
+- `src/contracts/addresses.json`: Contract addresses for:
+  - Clanker Factory
+  - Larry Party Factory
+  - Larry Crowdfund Implementation
+  - Uniswap V3 Factory
+
+### Data Storage
+- `src/data/crowdfundStore.json`: Persistent storage for:
+  - Discord message IDs for Larry Parties
+  - Contribution tracking
+  - Message update history
+
+### Message Templates
+- `src/utils/discordMessenger.js`: Discord message formatting for:
+  - Clanker token deployments
+  - Larry Party creations
+  - Contribution updates
+  - Embedded message layouts
 
 ## Environment Variables
 
 The bot requires several environment variables to be set:
 
 ### Required Core Variables
-- `DISCORD_TOKEN`: Your Discord bot token
-- `DISCORD_CHANNEL_ID`: Channel ID for notifications
 - `ALCHEMY_API_KEY`: Alchemy API key for Base network
+- `DISCORD_TOKEN`: Your Discord bot token
+- `DISCORD_CLANKER_CHANNEL_ID`: Channel ID for Clanker notifications
+- `DISCORD_LARRY_CHANNEL_ID`: Channel ID for Larry notifications
 
 ### FID Role Variables
 - `FID_BELOW_1000_ROLE`: Role ID for FIDs under 1,000
@@ -77,8 +157,8 @@ Copy `.env.example` to `.env` and fill in your values.
 
 1. Clone the repository:
 ```
-git clone https://github.com/yourusername/clanker-bot.git
-cd clanker-bot
+git clone https://github.com/benbodhi/clank.git
+cd clank
 ```
 
 2. Install dependencies:
@@ -88,22 +168,13 @@ npm install
 
 3. Set up your environment variables in `.env`
 
-4. Start the bot:
+4. Ensure the data directory exists:
+   - The bot will automatically create the `data` directory and `crowdfundStore.json` file if they don't exist.
+
+5. Start the bot:
 ```
 npm start
 ```
-
-## Configuration
-
-The bot's configuration is managed in `config.js`:
-- FID Threshold: Configurable value for role notifications
-- Contract Addresses:
-  - Clanker Contract
-  - Uniswap V3 Factory
-- Contract ABIs for interaction
-- Event topic hashes
-- Features:
-  - `displayImages`: Toggle token images in notifications (set to `false` for faster processing)
 
 ## Error Handling
 

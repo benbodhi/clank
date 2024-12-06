@@ -1,39 +1,11 @@
 const { EmbedBuilder } = require('discord.js');
-const config = require('../../config');
+const { settings } = require('../config');
 const { getWarpcastUserData } = require('../services/warpcastResolver');
 const { handleError } = require('../handlers/errorHandler');
 const { ethers } = require('ethers');
+const logger = require('./logger');
 
-/**
- * Sends a Discord message with token creation details
- * @param {Object} tokenData - Token creation data
- * @param {Object} eventLog - Event log data
- * @param {Discord.Client} discord - Discord client instance
- */
-async function sendDiscordMessage(tokenData, eventLog, discord) {
-    try {
-        const channel = await discord.channels.fetch(process.env.DISCORD_CHANNEL_ID);
-        if (!channel) {
-            throw new Error('Could not find Discord channel');
-        }
-
-        const warpcastData = await getWarpcastUserData(tokenData.fid);
-        
-        if (warpcastData?.followerCount === 0) {
-            console.log(`Skipping notification for FID ${tokenData.fid} with 0 followers.`);
-            return;
-        }
-
-        const embed = await createEmbed(tokenData, warpcastData);
-        const content = createMessageContent(tokenData, warpcastData);
-
-        await channel.send({ content, embeds: [embed] });
-    } catch (error) {
-        handleError(error, 'Discord Message');
-        throw error;
-    }
-}
-
+// Utility Functions
 function formatDeployerField(address) {
     try {
         const checksummedAddress = ethers.getAddress(address);
@@ -44,129 +16,17 @@ function formatDeployerField(address) {
     }
 }
 
-async function createEmbed(tokenData, warpcastData) {
-    try {
-        const deployerField = formatDeployerField(tokenData.deployer);
-        const uniswapTradeLink = createUniswapTradeLink(tokenData.tokenAddress);
-        const photonLink = tokenData.poolAddress ? 
-            `| **[Photon](https://photon-base.tinyastro.io/en/lp/${tokenData.poolAddress})**` : 
-            '';
-
-        // Determine embed color based on thresholds
-        let embedColor = '#0099ff'; // default blue
-
-        const fid = Number(tokenData.fid);
-        const followers = warpcastData?.followerCount || 0;
-
-        // FID colors (greens)
-        if (fid < config.fidThresholds.below1000) {
-            embedColor = '#00ff00'; // bright green
-        } else if (fid < config.fidThresholds.below5000) {
-            embedColor = '#00dd00'; // medium green
-        } else if (fid < config.fidThresholds.below10000) {
-            embedColor = '#00bb00'; // darker green
-        }
-
-        // Follower colors (purples) - override FID colors if higher threshold met
-        if (followers >= config.followerThresholds.over200000) {
-            embedColor = '#ff00ff'; // bright purple
-        } else if (followers >= config.followerThresholds.over100000) {
-            embedColor = '#dd00dd'; // medium purple
-        } else if (followers >= config.followerThresholds.over50000) {
-            embedColor = '#bb00bb'; // darker purple
-        } else if (followers >= config.followerThresholds.over20000) {
-            embedColor = '#990099'; // deep purple
-        } else if (followers >= config.followerThresholds.over10000) {
-            embedColor = '#770077'; // very deep purple
-        } else if (followers >= config.followerThresholds.over5000) {
-            embedColor = '#550055'; // darkest purple
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor(embedColor)
-            .setTitle('🔔 Clank Clank!')
-            .addFields(
-                ...createEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData)
-            )
-            .setTimestamp();
-
-        // Add image if available
-        if (tokenData.imageUrl) {
-            embed.setImage(tokenData.imageUrl);
-        }
-
-        return embed;
-    } catch (error) {
-        handleError(error, 'Discord Embed Creation');
-        throw error;
-    }
-}
-
-function createMessageContent(tokenData, warpcastData) {
-    const messages = [];
-    const fid = Number(tokenData.fid);
-    const followers = warpcastData?.followerCount || 0;
-    
-    // FID threshold notifications (cascade down)
-    if (fid < config.fidThresholds.below1000) {
-        messages.push(`**<@&${process.env.FID_BELOW_1000_ROLE}> 🔥**\n`);
-        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
-        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
-    } else if (fid < config.fidThresholds.below5000) {
-        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
-        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
-    } else if (fid < config.fidThresholds.below10000) {
-        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
-    }
-    
-    // Follower threshold notifications (cascade up)
-    if (followers >= config.followerThresholds.over200000) {
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_50000_ROLE}> 💫**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_100000_ROLE}> 🚀**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_200000_ROLE}> 🌟**\n`);
-    } else if (followers >= config.followerThresholds.over100000) {
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_50000_ROLE}> 💫**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_100000_ROLE}> 🚀**\n`);
-    } else if (followers >= config.followerThresholds.over50000) {
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_50000_ROLE}> 💫**\n`);
-    } else if (followers >= config.followerThresholds.over20000) {
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_20000_ROLE}> ⭐**\n`);
-    } else if (followers >= config.followerThresholds.over10000) {
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_10000_ROLE}> ✨**\n`);
-    } else if (followers >= config.followerThresholds.over5000) {
-        messages.push(`**<@&${process.env.FOLLOWERS_OVER_5000_ROLE}> 📈**\n`);
-    }
-    
-    // Add FID and Follower count information only if there are threshold tags
-    if (messages.length > 0) {
-        messages.push(`\n**FID: ${fid.toLocaleString()} | Followers: ${followers.toLocaleString()}**`);
-    }
-    
-    return messages.join('');
-}
-
 function createUniswapTradeLink(tokenAddress) {
     return `https://app.uniswap.org/#/swap?inputCurrency=ETH&outputCurrency=${tokenAddress}&chain=base`;
 }
 
-function createEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData) {
+// Clanker-specific Functions
+function createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData) {
     const farcasterValue = warpcastData ? 
         `${tokenData.fid} | **[${warpcastData.username}](https://warpcast.com/~/profiles/${tokenData.fid})** | ${warpcastData.followerCount.toLocaleString()} followers` :
         `${tokenData.fid}`;
 
-    const fields = [
+    return [
         { name: 'Token Name', value: tokenData.name, inline: true },
         { name: 'Ticker', value: tokenData.symbol, inline: true },
         { 
@@ -177,11 +37,342 @@ function createEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLin
         { name: 'Deployer', value: deployerField, inline: false },
         { name: 'FID', value: farcasterValue, inline: false },
         { name: 'Cast', value: `**[View Launch Cast](https://warpcast.com/~/conversations/${tokenData.castHash})**`, inline: false },
-        { name: 'Supply', value: tokenData.supply, inline: false },
+        { name: 'Total Supply', value: tokenData.totalSupply, inline: false },
         { name: 'LP Position', value: `**[${tokenData.lpNftId}](https://app.uniswap.org/#/pool/${tokenData.lpNftId})**`, inline: false }
     ];
-
-    return fields;
 }
 
-module.exports = { sendDiscordMessage }; 
+function createClankerMessageContent(tokenData, warpcastData) {
+    const messages = [];
+    const fid = Number(tokenData.fid);
+    const followers = warpcastData?.followerCount || 0;
+    
+    // FID threshold notifications
+    if (fid < settings.fidThresholds.below1000) {
+        messages.push(`**<@&${process.env.FID_BELOW_1000_ROLE}> 🔥**\n`);
+        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
+        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
+    } else if (fid < settings.fidThresholds.below5000) {
+        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
+        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
+    } else if (fid < settings.fidThresholds.below10000) {
+        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
+    }
+    
+    // Follower threshold notifications
+    if (followers >= settings.followerThresholds.over5000) {
+        const thresholds = [5000, 10000, 20000, 50000, 100000, 200000];
+        for (const threshold of thresholds) {
+            if (followers >= threshold) {
+                messages.push(`**<@&${process.env[`FOLLOWERS_OVER_${threshold}_ROLE`]}> ${getFollowerEmoji(threshold)}**\n`);
+            }
+        }
+    }
+    
+    if (messages.length > 0) {
+        messages.push(`\n**FID: ${fid.toLocaleString()} | Followers: ${followers.toLocaleString()}**`);
+    }
+    
+    return messages.join('');
+}
+
+function getFollowerEmoji(threshold) {
+    const emojis = {
+        5000: '📈',
+        10000: '✨',
+        20000: '⭐',
+        50000: '💫',
+        100000: '🚀',
+        200000: '🌟'
+    };
+    return emojis[threshold] || '📈';
+}
+
+// Main Message Sending Functions
+async function sendClankerMessage(tokenData, event, discord, timings = {}) {
+    try {
+        const messageStartTime = Date.now();
+        
+        const channel = await discord.channels.fetch(process.env.DISCORD_CLANKER_CHANNEL_ID);
+        if (!channel) {
+            throw new Error('Discord channel not found');
+        }
+
+        const deployerField = formatDeployerField(tokenData.deployer);
+        const uniswapTradeLink = createUniswapTradeLink(tokenData.tokenAddress);
+        const photonLink = tokenData.poolAddress ? 
+            ` | **[Photon](https://photon-base.tinyastro.io/en/lp/${tokenData.poolAddress})**` : '';
+
+        // Fetch Warpcast data
+        const warpcastData = await getWarpcastUserData(tokenData.fid);
+        if (warpcastData?.timing) {
+            timings.warpcastFetch = warpcastData.timing;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(determineEmbedColor(tokenData.fid, warpcastData?.followerCount))
+            .setTitle('🚀 New Clanker Token Deployed')
+            .addFields(createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData))
+            .setTimestamp();
+
+        if (tokenData.imageUrl) {
+            embed.setImage(tokenData.imageUrl);
+        }
+
+        const content = createClankerMessageContent(tokenData, warpcastData);
+        await channel.send({ content, embeds: [embed] });
+        
+        timings.discordSend = Date.now() - messageStartTime;
+    } catch (error) {
+        const isNetworkError = handleError(error, 'Discord Message');
+        if (isNetworkError) throw error;
+    }
+}
+
+async function sendLarryMessage(tokenData, discord) {
+    try {
+        const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
+        if (!channel) {
+            throw new Error('Could not find Larry Discord channel');
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle('🦜 New Larry Token Deployed')
+            .setColor(0x00ff00)
+            .addFields([
+                { name: 'Name', value: tokenData.name, inline: true },
+                { name: 'Symbol', value: tokenData.symbol, inline: true },
+                { name: 'Token Address', value: `[${tokenData.tokenAddress}](https://basescan.org/address/${tokenData.tokenAddress})`, inline: false },
+                { name: 'Deployer', value: formatDeployerField(tokenData.deployer), inline: false },
+                { name: 'Initial ETH', value: `${tokenData.ethValue} ETH`, inline: true }
+            ])
+            .setTimestamp();
+
+        await channel.send({ embeds: [embed] });
+    } catch (error) {
+        handleError(error, 'Larry Discord Message');
+        throw error;
+    }
+}
+
+function determineEmbedColor(fid, followers) {
+    let embedColor = '#0099ff'; // default blue
+
+    // FID colors (greens)
+    if (fid < settings.fidThresholds.below1000) {
+        embedColor = '#00ff00';
+    } else if (fid < settings.fidThresholds.below5000) {
+        embedColor = '#00dd00';
+    } else if (fid < settings.fidThresholds.below10000) {
+        embedColor = '#00bb00';
+    }
+
+    // Follower colors (purples) - override FID colors if higher threshold met
+    if (followers >= settings.followerThresholds.over200000) {
+        embedColor = '#ff00ff';
+    } else if (followers >= settings.followerThresholds.over100000) {
+        embedColor = '#dd00dd';
+    } else if (followers >= settings.followerThresholds.over50000) {
+        embedColor = '#bb00bb';
+    } else if (followers >= settings.followerThresholds.over20000) {
+        embedColor = '#990099';
+    } else if (followers >= settings.followerThresholds.over10000) {
+        embedColor = '#770077';
+    } else if (followers >= settings.followerThresholds.over5000) {
+        embedColor = '#550055';
+    }
+
+    return embedColor;
+}
+
+function formatCountdown(endTime) {
+    const now = Math.floor(Date.now() / 1000);
+    const remaining = endTime - now;
+    
+    if (remaining <= 0) return "Presale Ended";
+    
+    const minutes = Math.floor(remaining / 60);
+    const seconds = remaining % 60;
+    return `⏰ ${minutes}m ${seconds}s remaining`;
+}
+
+async function sendLarryPartyMessage({
+    creator,
+    crowdfund,
+    party,
+    tokenName,
+    tokenSymbol,
+    tokenAddress,
+    totalSupply,
+    endTime,
+    larryUrl
+}, discord) {
+    const embed = new EmbedBuilder()
+        .setColor(0x0099FF)
+        .setTitle(`🎉 New Larry Party: ${tokenName}`)
+        .setDescription(`A new Larry Party has been created for ${tokenName} (${tokenSymbol})`)
+        .addFields(
+            { name: 'Creator', value: `[${creator}](https://basescan.org/address/${creator})`, inline: true },
+            { name: 'Total Supply', value: `${totalSupply} tokens`, inline: true },
+            { name: 'End Time', value: `<t:${endTime}:R>`, inline: true },
+            { name: 'Crowdfund', value: `[View](https://basescan.org/address/${crowdfund})`, inline: true },
+            { name: 'Party', value: `[View](https://basescan.org/address/${party})`, inline: true },
+            tokenAddress ? { 
+                name: 'Token', 
+                value: `[View](https://basescan.org/address/${tokenAddress})`, 
+                inline: true 
+            } : { 
+                name: 'Token', 
+                value: 'Available after finalization', 
+                inline: true 
+            },
+            { name: 'Larry Club', value: `[View Party](${larryUrl})` }
+        )
+        .setTimestamp();
+
+    const channel = await discord.channels.fetch(process.env.DISCORD_CHANNEL_ID);
+    return await channel.send({ embeds: [embed] });
+}
+
+async function sendLarryContributionMessage(contributionDetails, discord) {
+    try {
+        const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
+        if (!channel) {
+            throw new Error('Could not find Larry Discord channel');
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle('💰 New Contribution to Larry Party')
+            .setColor(0x00ff00)
+            .addFields([
+                { name: 'Party Address', value: `[${contributionDetails.partyAddress}](https://basescan.org/address/${contributionDetails.partyAddress})`, inline: false },
+                { name: 'Contributor', value: `[${contributionDetails.contributor}](https://basescan.org/address/${contributionDetails.contributor})`, inline: true },
+                { name: 'Amount', value: `${contributionDetails.amount} ETH`, inline: true },
+                { name: 'Total Contributed', value: `${contributionDetails.totalContributed} ETH`, inline: true }
+            ])
+            .setTimestamp();
+
+        await channel.send({ embeds: [embed] });
+    } catch (error) {
+        handleError(error, 'Larry Contribution Discord Message');
+        throw error;
+    }
+}
+
+async function updateLarryPartyMessage({ messageId, tokenName, tokenSymbol, larryUrl, newContribution }, discord) {
+    try {
+        logger.section('📝 Updating Larry Party Message');
+        const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
+        if (!channel) {
+            throw new Error('Discord channel not found');
+        }
+
+        const message = await channel.messages.fetch(messageId);
+        if (!message) {
+            throw new Error('Message not found');
+        }
+
+        const embed = EmbedBuilder.from(message.embeds[0]);
+        
+        // Update contribution fields
+        const contributionField = embed.data.fields.find(f => f.name === 'Contributions');
+        if (contributionField) {
+            const contributions = contributionField.value.split('\n');
+            contributions.push(`${newContribution.contributor}: ${newContribution.amount} ETH`);
+            contributionField.value = contributions.join('\n');
+        }
+
+        // Update total contributed
+        const totalField = embed.data.fields.find(f => f.name === 'Total Contributed');
+        if (totalField) {
+            totalField.value = `${newContribution.totalContributed} ETH`;
+        }
+
+        await message.edit({ embeds: [embed] });
+        logger.detail('Message Updated', messageId);
+        logger.sectionEnd();
+    } catch (error) {
+        const isNetworkError = handleError(error, 'Discord Message Update');
+        if (isNetworkError) throw error;
+    }
+}
+
+// Helper function to shorten addresses
+function shortenAddress(address) {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+async function sendTradeMessage({ tokenAddress, messageId, provider, discord }) {
+    try {
+        const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
+        if (!channel) {
+            throw new Error('Could not find Larry Discord channel');
+        }
+
+        // Get the original message
+        const originalMessage = await channel.messages.fetch(messageId);
+        if (!originalMessage) {
+            throw new Error('Could not find original message');
+        }
+
+        // Fetch the pool address with error handling
+        let poolAddress;
+        try {
+            poolAddress = await getPoolAddress(tokenAddress, provider);
+            logger.detail('Pool Address Retrieved', poolAddress);
+        } catch (error) {
+            logger.warn('Failed to get pool address:', error.message);
+            poolAddress = null;
+        }
+
+        const photonLink = poolAddress ? ` | **[Photon](https://photon-base.tinyastro.io/en/lp/${poolAddress})**` : '';
+        const tradeLinks = `${tokenAddress}\n**[Basescan](https://basescan.org/token/${tokenAddress})** | **[Dexscreener](https://dexscreener.com/base/${tokenAddress})** | **[Uniswap](https://app.uniswap.org/#/swap?chain=base&outputCurrency=${tokenAddress})**${photonLink}`;
+
+        // Update the original message
+        const originalEmbed = originalMessage.embeds[0];
+        const updatedEmbed = EmbedBuilder.from(originalEmbed);
+        
+        // Find the Token Contract field and update it
+        const tokenFieldIndex = originalEmbed.fields.findIndex(field => field.name === 'Token Contract');
+        if (tokenFieldIndex !== -1) {
+            updatedEmbed.spliceFields(tokenFieldIndex, 1, { 
+                name: 'Token Contract', 
+                value: tradeLinks,
+                inline: false 
+            });
+        }
+
+        await originalMessage.edit({ embeds: [updatedEmbed] });
+
+        // Send new message as a reply
+        const tradeEmbed = new EmbedBuilder()
+            .setTitle('🎉 LP Deployed - Start Trading!')
+            .setColor(0x0099ff) // Discord blue
+            .addFields([
+                { 
+                    name: 'Token Contract', 
+                    value: tradeLinks,
+                    inline: false 
+                }
+            ])
+            .setTimestamp();
+
+        await channel.send({ 
+            embeds: [tradeEmbed],
+            reply: { messageReference: messageId, failIfNotExists: false }
+        });
+
+    } catch (error) {
+        handleError(error, 'Trade Message');
+        throw error;
+    }
+}
+
+module.exports = { 
+    sendClankerMessage,
+    sendLarryMessage,
+    sendLarryPartyMessage,
+    sendLarryContributionMessage,
+    updateLarryPartyMessage,
+    sendTradeMessage
+}; 
