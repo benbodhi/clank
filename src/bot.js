@@ -15,6 +15,7 @@ if (!process.env.DISCORD_TOKEN ||
 // Third-party dependencies
 const ethers = require('ethers');
 const { Client, GatewayIntentBits } = require('discord.js');
+const http = require('http');
 
 // Local imports: config first
 const { settings } = require('./config');
@@ -467,6 +468,18 @@ class ClankerBot {
                 this.lastEventTime = Date.now(); // Update last event time
             });
         }
+    }
+
+    setupHttpServer() {
+        const port = process.env.PORT || 3000;
+        const server = http.createServer((req, res) => {
+            res.writeHead(200);
+            res.end('Bot is running');
+        });
+        
+        server.listen(port, () => {
+            logger.info(`HTTP server listening on port ${port}`);
+        });
     }
 }
 
