@@ -345,10 +345,10 @@ I had issues integrating basename resolution because all examples I found in doc
 
 ## Author
 
-- **Benbodhi**
-  - Farcaster: [@benbodhi](https://warpcast.com/benbodhi)
-  - Twitter: [@benbodhi](https://twitter.com/benbodhi)
-  - GitHub: [@benbodhi](https://github.com/benbodhi)
+**Benbodhi**
+- Farcaster: [@benbodhi](https://warpcast.com/benbodhi)
+- Twitter: [@benbodhi](https://twitter.com/benbodhi)
+- GitHub: [@benbodhi](https://github.com/benbodhi)
 
 ## License
 
@@ -356,7 +356,22 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
-- Built for the Base ecosystem
-- We love Clanker
-- Uses ethers.js v6 for blockchain interaction
-- Powered by Discord.js for Discord integration
+Built for the Base ecosystem
+- We love Base
+- We love Clanker & Larry
+- We love Warpcast
+- We love Discord
+
+**We is just me btw*
+
+Powered By:
+- Ethers.js v6 for blockchain interaction
+- Discord.js for Discord integration
+- Warpcast API for Farcaster data
+- Winston for structured logging
+- Alchemy for WebSocket provider
+- MEE6 for role management integration
+- Uniswap V3 for trading interface
+- Photon for faster trading interface
+- Dexscreener for market data links
+- Basescan & Etherscan for blockchain explorer links

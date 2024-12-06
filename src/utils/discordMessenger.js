@@ -230,7 +230,7 @@ async function sendLarryPartyMessage({
         )
         .setTimestamp();
 
-    const channel = await discord.channels.fetch(process.env.DISCORD_CHANNEL_ID);
+    const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
     return await channel.send({ embeds: [embed] });
 }
 
