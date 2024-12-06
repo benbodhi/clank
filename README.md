@@ -1,6 +1,6 @@
 # Clank
 
-A Discord bot that monitors new token deployments on Base through both Clanker and Larry contracts, sending notifications to specified Discord channels.
+A Discord bot that monitors new token deployments on Base through both Clanker and Larry contracts, sending notifications to specified Discord channels with role tagging.
 
 ## Features
 
