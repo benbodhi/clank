@@ -34,6 +34,8 @@ const ClankerContractHelper = require('./contracts/helpers/ClankerContractHelper
 const logger = require('./utils/logger');
 const { getActiveCrowdfunds, addCrowdfund, updateCrowdfundStatus } = require('./utils/larryCrowdfundStore');
 
+const MAX_RETRIES = 5;
+
 class ClankerBot {
     constructor() {
         this.provider = null;
@@ -52,10 +54,24 @@ class ClankerBot {
 
     setupCleanupHandlers() {
         ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
-            process.on(signal, () => {
-                logger.info(`\n${signal} received. Cleaning up...`);
-                this.cleanup(true);
+            process.on(signal, async () => {
+                logger.info(`\n${signal} received. Starting cleanup...`);
+                await this.cleanup(true);
             });
+        });
+
+        // Handle uncaught exceptions
+        process.on('uncaughtException', async (error) => {
+            logger.error(`Uncaught Exception: ${error.message}`);
+            console.error(error);
+            await this.cleanup(true);
+        });
+
+        // Handle unhandled promise rejections
+        process.on('unhandledRejection', async (error) => {
+            logger.error(`Unhandled Rejection: ${error.message}`);
+            console.error(error);
+            await this.cleanup(true);
         });
     }
 
@@ -305,37 +321,36 @@ class ClankerBot {
             clearInterval(this.healthCheckInterval);
         }
 
-        let lastLogTime = Date.now();
-
         this.healthCheckInterval = setInterval(async () => {
             if (this.isShuttingDown || this.isReconnecting) return;
 
-            const timeSinceLastEvent = Date.now() - this.lastEventTime;
-            const minutesSinceLastEvent = Math.round(timeSinceLastEvent / 60000);
-            
-            // Only log every 15 minutes
-            const timeSinceLastLog = Date.now() - lastLogTime;
-            if (timeSinceLastLog >= 15 * 60 * 1000) {
-                logger.section('🏥 Health Check');
-                logger.detail('Status', 'Connection healthy');
-                logger.detail('Time Since Last Event', minutesSinceLastEvent === 0 ? 
-                    'Less than a minute' : 
-                    `${minutesSinceLastEvent} minute${minutesSinceLastEvent === 1 ? '' : 's'}`
-                );
-                logger.sectionEnd();
-                lastLogTime = Date.now();
-            }
-
-            // Check connection if no events in 5 minutes
-            if (timeSinceLastEvent > 5 * 60 * 1000) {
-                try {
-                    await this.provider.getBlockNumber();
-                } catch (error) {
-                    logger.error('Connection check failed:', error.message);
+            try {
+                // Check WebSocket connection
+                if (this.provider?.websocket?.readyState !== 1) {
+                    logger.warn('WebSocket not in OPEN state, reconnecting...');
                     await this.handleDisconnect();
+                    return;
                 }
+
+                // Check Discord connection
+                if (!this.discord?.isReady()) {
+                    logger.warn('Discord client not ready, reconnecting...');
+                    await this.handleDisconnect();
+                    return;
+                }
+
+                // Check if we've received events recently
+                const timeSinceLastEvent = Date.now() - this.lastEventTime;
+                if (timeSinceLastEvent > 5 * 60 * 1000) { // 5 minutes
+                    logger.warn('No events received recently, checking connection...');
+                    await this.provider.getBlockNumber();
+                }
+
+            } catch (error) {
+                logger.error(`Health check failed: ${error.message}`);
+                await this.handleDisconnect();
             }
-        }, 60 * 1000); // Check every minute but only log every 15
+        }, 30000); // Check every 30 seconds
     }
 
     async handleDisconnect() {
@@ -387,10 +402,10 @@ class ClankerBot {
         }
         
         this.isShuttingDown = true;
-        logger.info('\nShutting down services...');
+        logger.info('Shutting down services...');
         
         try {
-            // Remove signal handlers
+            // Remove signal handlers first
             ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
                 process.removeAllListeners(signal);
             });
@@ -399,6 +414,7 @@ class ClankerBot {
             for (const [address, contract] of this.activeCrowdfundListeners) {
                 contract.removeAllListeners();
                 this.activeCrowdfundListeners.delete(address);
+                logger.detail('Removed Listener', address);
             }
             
             // Clean up factory listeners
@@ -423,27 +439,14 @@ class ClankerBot {
                 this.discord = null;
             }
 
-            // Clean up intervals
-            if (this.healthCheckInterval) {
-                clearInterval(this.healthCheckInterval);
-                this.healthCheckInterval = null;
-            }
-
-            // Remove uncaught handlers
-            process.removeAllListeners('uncaughtException');
-            process.removeAllListeners('unhandledRejection');
+            logger.info('Cleanup completed successfully');
 
             if (shouldExit) {
-                // Force exit after 3 seconds if normal exit fails
-                setTimeout(() => {
-                    logger.info('Forcing exit...');
-                    process.exit(1);
-                }, 3000);
-                
+                logger.info('Exiting process...');
                 process.exit(0);
             }
         } catch (error) {
-            handleError(error, 'Cleanup');
+            logger.error(`Cleanup error: ${error.message}`);
             if (shouldExit) {
                 process.exit(1);
             }
