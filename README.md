@@ -6,7 +6,7 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
 
 - 🔍 Monitors new token deployments in real-time through:
   - Clanker Factory
-  - Larry Party Factory
+  - Larry Factory
 - 📊 Provides detailed token information including:
   - Token name and symbol
   - Contract address with links (Basescan, Dexscreener, Uniswap, Photon)
@@ -16,11 +16,11 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
   - LP NFT ID with Uniswap position link
   - Launch cast link
   - Token images (configurable)
-- 🎉 Larry Party Features:
-  - Monitors new party creations
+- 🎉 Larry Features:
+  - Monitors new crowdfund/party creations
   - Tracks contributions in real-time
-  - Updates original party messages with contribution info
-  - Shows party progress and deadlines
+  - Updates original messages with contribution info
+  - Shows progress and deadlines
 - 🏷️ Role pinging system:
   - Low FID notifications (configurable threshold)
   - High follower count notifications
@@ -35,7 +35,7 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
   - Graceful shutdown handling
   - Service health monitoring (checks every minute, logs every 15 minutes)
 - 🧠 Smart Filtering:
-  - Avoids notifications for 0-follower accounts
+  - Avoids notifications for Clankers deployed by 0-follower accounts
   - Configurable thresholds for notifications
 
 ## Prerequisites
@@ -106,12 +106,12 @@ The bot's configuration is split into multiple files:
   - FID Thresholds for role notifications
   - Follower Thresholds for role notifications
   - Features toggles (e.g., `displayImages`)
-  - Larry Party configuration options
+  - Larry configuration options
 
 ### Contract Configuration
 - `src/contracts/addresses.json`: Contract addresses for:
   - Clanker Factory
-  - Larry Party Factory
+  - Larry Factory
   - Larry Crowdfund Implementation
   - Uniswap V3 Factory
 
@@ -124,7 +124,7 @@ The bot's configuration is split into multiple files:
 ### Message Templates
 - `src/utils/discordMessenger.js`: Discord message formatting for:
   - Clanker token deployments
-  - Larry Party creations
+  - Larry Crowdfund/Party creations
   - Contribution updates
   - Embedded message layouts
 
