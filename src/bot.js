@@ -208,7 +208,8 @@ class ClankerBot {
                     tokenOpts,
                     transactionHash: event.log.transactionHash,
                     provider: this.provider,
-                    discord: this.discord
+                    discord: this.discord,
+                    bot: this
                 });
             } catch (error) {
                 handleError(error, 'Larry Factory Event Handler');

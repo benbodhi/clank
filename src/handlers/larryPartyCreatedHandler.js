@@ -13,7 +13,8 @@ async function handleLarryPartyCreated({
     tokenOpts,
     transactionHash,
     provider,
-    discord
+    discord,
+    bot
 }) {
     const startTime = Date.now();
     
@@ -61,8 +62,8 @@ async function handleLarryPartyCreated({
         await addCrowdfund(crowdfund, message.id);
         logger.detail('Discord Message ID', message.id);
 
-        // Set up contribution listener for this crowdfund
-        await this.setupCrowdfundListener(crowdfund);
+        // Set up contribution listener for this crowdfund using the bot instance
+        await bot.setupCrowdfundListener(crowdfund);
         
         logger.timing('Discord Message', Date.now() - messageStartTime);
         logger.timing('Total Processing', Date.now() - startTime);
