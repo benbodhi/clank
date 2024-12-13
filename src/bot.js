@@ -85,7 +85,6 @@ class ClankerBot {
             
             // Connect to Redis first
             await redisStore.connect();
-            logger.detail('Redis Connected');
 
             // Initialize provider with WebSocket
             logger.detail('Starting WebSocket Provider...');
