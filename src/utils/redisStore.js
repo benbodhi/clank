@@ -13,7 +13,9 @@ class RedisStore {
 
             logger.detail('Redis URL:', process.env.REDIS_URL || 'Using default config');
 
-            this.redis = new Redis(process.env.REDIS_URL, {
+            const url = process.env.REDIS_URL + '?family=0';
+            
+            this.redis = new Redis(url, {
                 maxRetriesPerRequest: 5,
                 retryStrategy(times) {
                     const delay = Math.min(times * 100, 3000);
