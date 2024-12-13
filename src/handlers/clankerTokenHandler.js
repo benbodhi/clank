@@ -14,7 +14,7 @@ const { ethers } = require('ethers');
  */
 async function handleClankerToken({
     tokenAddress,
-    lpNftId,
+    positionId,
     deployer,
     fid,
     name,
@@ -36,7 +36,7 @@ async function handleClankerToken({
         logger.detail('Deployer', deployer);
         logger.detail('FID', fid);
         logger.detail('Transaction', event.log.transactionHash);
-        logger.detail('LP NFT ID', lpNftId);
+        logger.detail('LP NFT ID', positionId);
         logger.detail('Total Supply', formatUnits(supply, 18));
         logger.detail('Locker Address', lockerAddress);
         logger.detail('Cast Hash', castHash);
@@ -59,7 +59,7 @@ async function handleClankerToken({
         // Send Discord notification
         await sendClankerMessage({
             tokenAddress,
-            lpNftId,
+            positionId,
             deployer,
             fid,
             name,

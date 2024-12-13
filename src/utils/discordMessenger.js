@@ -38,7 +38,7 @@ function createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, ph
         { name: 'FID', value: farcasterValue, inline: false },
         { name: 'Cast', value: `**[View Launch Cast](https://warpcast.com/~/conversations/${tokenData.castHash})**`, inline: false },
         { name: 'Total Supply', value: tokenData.totalSupply, inline: false },
-        { name: 'LP Position', value: `**[${tokenData.lpNftId}](https://app.uniswap.org/#/pool/${tokenData.lpNftId})**`, inline: false }
+        { name: 'LP Position', value: `**[${tokenData.positionId}](https://app.uniswap.org/#/pool/${tokenData.positionId})**`, inline: false }
     ];
 }
 

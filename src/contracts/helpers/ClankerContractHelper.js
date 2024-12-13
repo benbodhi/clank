@@ -9,7 +9,7 @@ class ClankerContractHelper {
         
         this.clankerFactory = new ethers.Contract(
             addresses.clanker.factory,
-            require('../abis/clanker/ClankerFactory.json'),
+            require('../abis/clanker/ClankerFactoryV2.json'),
             provider
         );
     }

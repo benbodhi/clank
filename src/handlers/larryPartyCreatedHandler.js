@@ -36,8 +36,8 @@ async function handleLarryPartyCreated({
         logger.detail('Transaction', transactionHash);
         logger.detail('Larry Club URL', `https://www.larry.club/token/${crowdfund}`);
 
-        // Get end time from current time + 15 minutes
-        const endTime = Math.floor(Date.now() / 1000) + (15 * 60);
+        // Get end time from current time + 69 minutes
+        const endTime = Math.floor(Date.now() / 1000) + (69 * 60);
         logger.detail('End Time', new Date(endTime * 1000).toISOString());
 
         const messageStartTime = Date.now();

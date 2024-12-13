@@ -217,12 +217,12 @@ class ClankerBot {
 
         // Setup Clanker Factory listeners
         this.clankerContracts.clankerFactory.on('TokenCreated', 
-            async (tokenAddress, lpNftId, deployer, fid, name, symbol, supply, lockerAddress, castHash, event) => {
+            async (tokenAddress, positionId, deployer, fid, name, symbol, supply, lockerAddress, castHash, event) => {
             try {
                 this.lastEventTime = Date.now(); // Update last event time
                 await handleClankerToken({
                     tokenAddress,
-                    lpNftId,
+                    positionId,
                     deployer,
                     fid,
                     name,
