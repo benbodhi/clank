@@ -11,16 +11,20 @@ class RedisStore {
         try {
             if (this.isConnected) return;
 
-            const options = {
-                host: process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost',
-                port: 6379,
-                retryStrategy: (times) => {
-                    const delay = Math.min(times * 50, 2000);
-                    return delay;
-                }
-            };
+            logger.detail('Redis URL:', process.env.REDIS_URL || 'Using default config');
 
-            this.redis = new Redis(process.env.REDIS_URL || options);
+            this.redis = new Redis(process.env.REDIS_URL, {
+                maxRetriesPerRequest: 5,
+                retryStrategy(times) {
+                    const delay = Math.min(times * 100, 3000);
+                    logger.detail(`Redis retry attempt ${times}, delay: ${delay}ms`);
+                    return delay;
+                },
+                reconnectOnError(err) {
+                    logger.error('Redis reconnect error:', err);
+                    return true;
+                }
+            });
             
             this.redis.on('error', (error) => {
                 logger.error('Redis Error:', error);
