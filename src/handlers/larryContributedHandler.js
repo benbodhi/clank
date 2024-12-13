@@ -1,7 +1,7 @@
 const { formatEther, ethers } = require('ethers');
 const { updateLarryPartyMessage } = require('../utils/discordMessenger');
 const { handleError } = require('./errorHandler');
-const { getCrowdfund } = require('../utils/larryCrowdfundStore');
+const { getCrowdfund, addContribution } = require('../utils/larryCrowdfundStore');
 const logger = require('../utils/logger');
 
 async function handleLarryContributed(event, provider, discord) {
@@ -41,18 +41,28 @@ async function handleLarryContributed(event, provider, discord) {
             crowdfundContract.symbol()
         ]);
 
+        const contribution = {
+            contributor,
+            amount: formatEther(amount),
+            totalContributed: formatEther(totalContributed),
+            timestamp: Date.now(),
+            transactionHash: event.transactionHash
+        };
+
+        // Add contribution to store, skip if already processed
+        const isNewContribution = await addContribution(crowdfundAddress, contribution);
+        if (!isNewContribution) {
+            logger.detail('Skipping duplicate contribution');
+            return;
+        }
+
+        // Update Discord message only for new contributions
         await updateLarryPartyMessage({
             messageId: crowdfund.messageId,
             tokenName,
             tokenSymbol,
             larryUrl: `https://www.larry.club/token/${crowdfundAddress}`,
-            newContribution: {
-                contributor,
-                amount: formatEther(amount),
-                totalContributed: formatEther(totalContributed),
-                timestamp: Date.now(),
-                transactionHash: event.transactionHash
-            }
+            newContribution: contribution
         }, discord);
 
         logger.timing('Total Processing', Date.now() - startTime);

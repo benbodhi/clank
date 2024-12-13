@@ -26,9 +26,10 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
   - High follower count notifications
   - Multiple threshold levels for fine-grained alerts
 - 💾 Persistent Storage:
-  - JSON-based message tracking
+  - Redis-based message tracking
+  - Thread ID persistence
   - Contribution history
-  - Automatic data directory management
+  - Duplicate transaction prevention
 - 🔄 Reliability Features:
   - Automatic WebSocket reconnection with exponential backoff
   - Resilient error handling and logging
@@ -42,6 +43,7 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
 
 - Node.js v18 or higher
 - npm or yarn
+- Redis (local development)
 - Discord bot token
 - Discord channel ID
 - Alchemy API key for Base network
@@ -49,7 +51,7 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
 ## Project Structure
 
 ```
-project/
+clank/
 ├── src/
 │   ├── config/
 │   │   ├── index.js
@@ -73,8 +75,6 @@ project/
 │   │   │   └── LarryContractHelper.js
 │   │   ├── addresses.json
 │   │   └── utils.js
-│   ├── data/
-│   │   └── crowdfundStore.json
 │   ├── handlers/
 │   │   ├── clankerTokenHandler.js
 │   │   ├── errorHandler.js
@@ -116,9 +116,11 @@ The bot's configuration is split into multiple files:
   - Uniswap V3 Factory
 
 ### Data Storage
-- `src/data/crowdfundStore.json`: Persistent storage for:
-  - Discord message IDs for Larry Parties
+- Redis for persistent storage:
+  - Discord message IDs
+  - Thread IDs
   - Contribution tracking
+  - Transaction history
   - Message update history
 
 ### Message Templates
@@ -137,6 +139,7 @@ The bot requires several environment variables to be set:
 - `DISCORD_TOKEN`: Your Discord bot token
 - `DISCORD_CLANKER_CHANNEL_ID`: Channel ID for Clanker notifications
 - `DISCORD_LARRY_CHANNEL_ID`: Channel ID for Larry notifications
+- `REDIS_URL`: Redis connection URL (defaults to localhost for development)
 
 ### FID Role Variables
 - `FID_BELOW_1000_ROLE`: Role ID for FIDs under 1,000
@@ -156,23 +159,31 @@ Copy `.env.example` to `.env` and fill in your values.
 ## Installation
 
 1. Clone the repository:
-```
+```bash
 git clone https://github.com/benbodhi/clank.git
 cd clank
 ```
 
 2. Install dependencies:
-```
+```bash
 npm install
 ```
 
-3. Set up your environment variables in `.env`
+3. Install Redis (for local development):
+```bash
+# Mac
+brew install redis
+brew services start redis
 
-4. Ensure the data directory exists:
-   - The bot will automatically create the `data` directory and `crowdfundStore.json` file if they don't exist.
+# Linux
+sudo apt-get install redis-server
+sudo systemctl start redis
+```
+
+4. Set up your environment variables in `.env`
 
 5. Start the bot:
-```
+```bash
 npm start
 ```
 
@@ -180,6 +191,7 @@ npm start
 
 The bot includes comprehensive error handling:
 - Automatic WebSocket reconnection
+- Redis connection retry logic
 - Graceful shutdown on process termination
 - Detailed error logging with timestamps
 - Service health monitoring
@@ -194,7 +206,9 @@ The bot can be deployed on platforms like Railway:
 
 2. **Deploy on Railway**
    - Create new project from GitHub repo
-   - Set environment variables
+   - Add Redis service
+   - Link Redis URL to bot service
+   - Set remaining environment variables
    - Deploy using `npm start`
 
 ## Discord Bot Setup
@@ -370,6 +384,7 @@ Powered By:
 - Warpcast API for Farcaster data
 - Winston for structured logging
 - Alchemy for WebSocket provider
+- Redis for persistent data storage
 - MEE6 for role management integration
 - Uniswap V3 for trading interface
 - Photon for faster trading interface

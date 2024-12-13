@@ -36,6 +36,7 @@ const logger = require('./utils/logger');
 const { getActiveCrowdfunds, addCrowdfund, updateCrowdfundStatus } = require('./utils/larryCrowdfundStore');
 
 const MAX_RETRIES = 5;
+const redisStore = require('./utils/redisStore');
 
 class ClankerBot {
     constructor() {
@@ -81,9 +82,13 @@ class ClankerBot {
         
         try {
             logger.section('🚀 Initializing Bot');
-            logger.detail('Starting WebSocket Provider...');
             
+            // Connect to Redis first
+            await redisStore.connect();
+            logger.detail('Redis Connected');
+
             // Initialize provider with WebSocket
+            logger.detail('Starting WebSocket Provider...');
             this.provider = new ethers.WebSocketProvider(
                 `wss://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
                 {
@@ -260,10 +265,25 @@ class ClankerBot {
             this.provider
         );
 
-        // Add to active listeners map before setting up listeners
+        // Add to active listeners map
         this.activeCrowdfundListeners.set(address, crowdfundContract);
 
-        // Set up contribution listener
+        // Get past contribution events
+        const currentBlock = await this.provider.getBlockNumber();
+        const pastEvents = await crowdfundContract.queryFilter('Contributed', currentBlock - 10000, currentBlock);
+        
+        logger.detail('Past Contributions', `Found ${pastEvents.length} events for ${address}`);
+        
+        // Process past events
+        for (const event of pastEvents) {
+            try {
+                await handleLarryContributed(event, this.provider, this.discord);
+            } catch (error) {
+                handleError(error, 'Past Contribution Event Handler');
+            }
+        }
+
+        // Set up new event listeners
         crowdfundContract.on('Contributed', async (sender, contributor, amount, delegate, event) => {
             try {
                 await handleLarryContributed(event, this.provider, this.discord);
@@ -407,6 +427,9 @@ class ClankerBot {
         logger.info('Shutting down services...');
         
         try {
+            // Disconnect Redis first
+            await redisStore.disconnect();
+            
             // Remove signal handlers first
             ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
                 process.removeAllListeners(signal);

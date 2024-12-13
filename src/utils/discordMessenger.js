@@ -4,6 +4,7 @@ const { getWarpcastUserData } = require('../services/warpcastResolver');
 const { handleError } = require('../handlers/errorHandler');
 const { ethers } = require('ethers');
 const logger = require('./logger');
+const { getCrowdfund, updateThreadId } = require('./larryCrowdfundStore');
 
 // Utility Functions
 function formatDeployerField(address) {
@@ -272,13 +273,30 @@ async function updateLarryPartyMessage({ messageId, tokenName, tokenSymbol, larr
             throw new Error('Message not found');
         }
 
-        // Create a new thread if it doesn't exist
-        let thread = message.thread;
+        // Get crowdfund data to check for existing thread
+        const crowdfund = await getCrowdfund(newContribution.crowdfundAddress);
+        if (!crowdfund) {
+            throw new Error('Crowdfund data not found');
+        }
+
+        // Get or create thread
+        let thread;
+        if (crowdfund.threadId) {
+            try {
+                thread = await channel.threads.fetch(crowdfund.threadId);
+            } catch (error) {
+                logger.warn('Could not fetch existing thread:', error.message);
+            }
+        }
+
         if (!thread) {
             thread = await message.startThread({
-                name: `${tokenName} Contributions`,
+                name: `${tokenName} (${tokenSymbol}) Contributions`,
                 autoArchiveDuration: 1440 // 24 hours
             });
+            // Store thread ID in Redis
+            await updateThreadId(newContribution.crowdfundAddress, thread.id);
+            logger.detail('Created New Thread', thread.id);
         }
 
         // Send contribution update to thread
