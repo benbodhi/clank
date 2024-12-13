@@ -11,7 +11,16 @@ class RedisStore {
         try {
             if (this.isConnected) return;
 
-            this.redis = new Redis(process.env.REDIS_URL);
+            const options = {
+                host: process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost',
+                port: 6379,
+                retryStrategy: (times) => {
+                    const delay = Math.min(times * 50, 2000);
+                    return delay;
+                }
+            };
+
+            this.redis = new Redis(process.env.REDIS_URL || options);
             
             this.redis.on('error', (error) => {
                 logger.error('Redis Error:', error);
