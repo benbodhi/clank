@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
 const { sendLarryPartyMessage } = require('../utils/discordMessenger');
 const { handleError } = require('./errorHandler');
-const { addCrowdfund } = require('../utils/larryCrowdfundStore');
+const { addCrowdfund, getCrowdfund } = require('../utils/larryCrowdfundStore');
 const logger = require('../utils/logger');
 
 async function handleLarryPartyCreated({
@@ -60,6 +60,8 @@ async function handleLarryPartyCreated({
 
         // Store crowdfund data
         await addCrowdfund(crowdfund, message.id);
+        const storedCrowdfund = await getCrowdfund(crowdfund);
+        logger.detail('Stored Crowdfund Data', JSON.stringify(storedCrowdfund));
         logger.detail('Discord Message ID', message.id);
 
         // Set up contribution listener for this crowdfund using the bot instance

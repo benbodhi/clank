@@ -10,14 +10,19 @@ async function handleLarryContributed(event, provider, discord) {
     try {
         logger.section('💰 New Larry Party Contribution');
         
-        const [sender, contributor, amount, delegate] = event.args;
         const crowdfundAddress = event.address;
+        if (!crowdfundAddress) {
+            throw new Error('No crowdfund address in event');
+        }
+        
+        const [sender, contributor, amount, delegate] = event.args;
         
         logger.detail('Crowdfund Address', crowdfundAddress);
         logger.detail('Contributor', contributor);
         logger.detail('Amount', formatEther(amount));
         logger.detail('Transaction', event.transactionHash);
 
+        // Get stored crowdfund data
         const crowdfund = await getCrowdfund(crowdfundAddress);
         if (!crowdfund?.messageId) {
             logger.warn('No Discord message found for crowdfund:', crowdfundAddress);
@@ -49,7 +54,7 @@ async function handleLarryContributed(event, provider, discord) {
                 transactionHash: event.transactionHash
             }
         }, discord);
-        
+
         logger.timing('Total Processing', Date.now() - startTime);
         logger.sectionEnd();
     } catch (error) {
