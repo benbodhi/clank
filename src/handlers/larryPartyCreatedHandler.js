@@ -47,7 +47,7 @@ async function handleLarryPartyCreated({
             party,
             tokenName: tokenOpts.name,
             tokenSymbol: tokenOpts.symbol,
-            tokenAddress: null, // Will be updated when finalized
+            tokenAddress: null,
             totalSupply: ethers.formatEther(tokenOpts.totalSupply),
             endTime,
             larryUrl: `https://www.larry.club/token/${crowdfund}`
@@ -57,8 +57,12 @@ async function handleLarryPartyCreated({
             throw new Error('Failed to send Discord message');
         }
 
+        // Store crowdfund data
         await addCrowdfund(crowdfund, message.id);
         logger.detail('Discord Message ID', message.id);
+
+        // Set up contribution listener for this crowdfund
+        await this.setupCrowdfundListener(crowdfund);
         
         logger.timing('Discord Message', Date.now() - messageStartTime);
         logger.timing('Total Processing', Date.now() - startTime);

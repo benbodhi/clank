@@ -272,19 +272,35 @@ async function updateLarryPartyMessage({ messageId, tokenName, tokenSymbol, larr
             throw new Error('Message not found');
         }
 
-        const embed = EmbedBuilder.from(message.embeds[0]);
-        
-        // Update contribution fields
-        const contributionField = embed.data.fields.find(f => f.name === 'Contributions');
-        if (contributionField) {
-            const contributions = contributionField.value.split('\n');
-            contributions.push(`${newContribution.contributor}: ${newContribution.amount} ETH`);
-            contributionField.value = contributions.join('\n');
+        // Create a new thread if it doesn't exist
+        let thread = message.thread;
+        if (!thread) {
+            thread = await message.startThread({
+                name: `${tokenName} Contributions`,
+                autoArchiveDuration: 1440 // 24 hours
+            });
         }
 
-        // Update total contributed
+        // Send contribution update to thread
+        const contributionEmbed = new EmbedBuilder()
+            .setColor(0x00ff00)
+            .setTitle('New Contribution')
+            .addFields([
+                { name: 'Contributor', value: `[${newContribution.contributor}](https://basescan.org/address/${newContribution.contributor})`, inline: true },
+                { name: 'Amount', value: `${newContribution.amount} ETH`, inline: true },
+                { name: 'Total', value: `${newContribution.totalContributed} ETH`, inline: true },
+                { name: 'Transaction', value: `[View](https://basescan.org/tx/${newContribution.transactionHash})`, inline: true }
+            ])
+            .setTimestamp();
+
+        await thread.send({ embeds: [contributionEmbed] });
+
+        // Update the main message with total contributed
+        const embed = EmbedBuilder.from(message.embeds[0]);
         const totalField = embed.data.fields.find(f => f.name === 'Total Contributed');
-        if (totalField) {
+        if (!totalField) {
+            embed.addFields({ name: 'Total Contributed', value: `${newContribution.totalContributed} ETH`, inline: true });
+        } else {
             totalField.value = `${newContribution.totalContributed} ETH`;
         }
 
