@@ -23,55 +23,99 @@ function createUniswapTradeLink(tokenAddress) {
 
 // Clanker-specific Functions
 function createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData) {
+    const isClankFun = tokenData.castHash?.toLowerCase().includes('clank.fun');
     const farcasterValue = warpcastData ? 
         `${tokenData.fid} | **[${warpcastData.username}](https://warpcast.com/~/profiles/${tokenData.fid})** | ${warpcastData.followerCount.toLocaleString()} followers` :
         `${tokenData.fid}`;
 
-    return [
+    const clankFunLink = `**[Clank.fun](https://clank.fun/t/${tokenData.tokenAddress})**`;
+    const geckoTerminalLink = tokenData.poolAddress ? 
+        `**[GeckoTerminal](https://www.geckoterminal.com/base/pools/${tokenData.poolAddress})**` : '';
+    const photonLinkClean = tokenData.poolAddress ? 
+        `**[Photon](https://photon-base.tinyastro.io/en/lp/${tokenData.poolAddress})**` : '';
+
+    const firstLineLinks = [
+        `**[Basescan](https://basescan.org/token/${tokenData.tokenAddress})**`,
+        `**[Dexscreener](https://dexscreener.com/base/${tokenData.tokenAddress})**`,
+        geckoTerminalLink
+    ].filter(Boolean).join(' | ');
+
+    const secondLineLinks = [
+        photonLinkClean,
+        `**[Uniswap](${uniswapTradeLink})**`,
+        clankFunLink
+    ].filter(Boolean).join(' | ');
+
+    const fields = [
         { name: 'Token Name', value: tokenData.name, inline: true },
         { name: 'Ticker', value: tokenData.symbol, inline: true },
         { 
             name: 'Contract Address', 
-            value: `${tokenData.tokenAddress}\n**[Basescan](https://basescan.org/token/${tokenData.tokenAddress})** | **[Dexscreener](https://dexscreener.com/base/${tokenData.tokenAddress})** | **[Uniswap](${uniswapTradeLink})** ${photonLink}`, 
+            value: `${tokenData.tokenAddress}\n${firstLineLinks}\n${secondLineLinks}`, 
             inline: false 
         },
-        { name: 'Deployer', value: deployerField, inline: false },
-        { name: 'FID', value: farcasterValue, inline: false },
-        { name: 'Cast', value: `**[View Launch Cast](https://warpcast.com/~/conversations/${tokenData.castHash})**`, inline: false },
+        { name: 'Deployer', value: deployerField, inline: false }
+    ];
+
+    // Only add FID and Cast field if not a clank.fun deployment
+    if (!isClankFun) {
+        fields.push({ 
+            name: 'FID', 
+            value: farcasterValue, 
+            inline: false 
+        });
+        fields.push({ 
+            name: 'Cast', 
+            value: `**[View Launch Cast](https://warpcast.com/~/conversations/${tokenData.castHash})**`, 
+            inline: false 
+        });
+    }
+
+    fields.push(
         { name: 'Total Supply', value: tokenData.totalSupply, inline: false },
         { name: 'LP Position', value: `**[${tokenData.positionId}](https://app.uniswap.org/#/pool/${tokenData.positionId})**`, inline: false }
-    ];
+    );
+
+    return fields;
 }
 
 function createClankerMessageContent(tokenData, warpcastData) {
     const messages = [];
     const fid = Number(tokenData.fid);
     const followers = warpcastData?.followerCount || 0;
+    const isClankFun = tokenData.castHash?.toLowerCase().includes('clank.fun');
     
-    // FID threshold notifications
-    if (fid < settings.fidThresholds.below1000) {
-        messages.push(`**<@&${process.env.FID_BELOW_1000_ROLE}> 🔥**\n`);
-        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
-        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
-    } else if (fid < settings.fidThresholds.below5000) {
-        messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
-        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
-    } else if (fid < settings.fidThresholds.below10000) {
-        messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
-    }
-    
-    // Follower threshold notifications
-    if (followers >= settings.followerThresholds.over5000) {
-        const thresholds = [5000, 10000, 20000, 50000, 100000, 200000];
-        for (const threshold of thresholds) {
-            if (followers >= threshold) {
-                messages.push(`**<@&${process.env[`FOLLOWERS_OVER_${threshold}_ROLE`]}> ${getFollowerEmoji(threshold)}**\n`);
+    if (isClankFun) {
+        messages.push(`**<@&${process.env.CLANKFUN_DEPLOYER_ROLE}> 🤖**\n`);
+    } else if (fid > 0) {  // Only show FID notifications for non-clank.fun and valid FIDs
+        if (fid < settings.fidThresholds.below1000) {
+            messages.push(`**<@&${process.env.FID_BELOW_1000_ROLE}> 🔥**\n`);
+            messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
+            messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
+        } else if (fid < settings.fidThresholds.below5000) {
+            messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
+            messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
+        } else if (fid < settings.fidThresholds.below10000) {
+            messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
+        }
+        
+        // Follower threshold notifications (only for non-clank.fun and valid FIDs)
+        if (followers >= settings.followerThresholds.over5000) {
+            const thresholds = [5000, 10000, 20000, 50000, 100000, 200000];
+            for (const threshold of thresholds) {
+                if (followers >= threshold) {
+                    messages.push(`**<@&${process.env[`FOLLOWERS_OVER_${threshold}_ROLE`]}> ${getFollowerEmoji(threshold)}**\n`);
+                }
             }
         }
     }
     
     if (messages.length > 0) {
-        messages.push(`\n**FID: ${fid.toLocaleString()} | Followers: ${followers.toLocaleString()}**`);
+        if (isClankFun) {
+            messages.push(`\n**Clank.fun Deployment**`);
+        } else if (fid > 0) {
+            messages.push(`\n**FID: ${fid.toLocaleString()} | Followers: ${followers.toLocaleString()}**`);
+        }
     }
     
     return messages.join('');
@@ -158,6 +202,12 @@ async function sendLarryMessage(tokenData, discord) {
 
 function determineEmbedColor(fid, followers) {
     let embedColor = '#0099ff'; // default blue
+
+    // Check for clank.fun deployment (fid will be 0)
+    if (fid === 0) {
+        embedColor = '#ff9900'; // orange for clank.fun deployments
+        return embedColor;
+    }
 
     // FID colors (greens)
     if (fid < settings.fidThresholds.below1000) {

@@ -7,8 +7,9 @@ require('dotenv').config();
 if (!process.env.DISCORD_TOKEN || 
     !process.env.ALCHEMY_API_KEY || 
     !process.env.DISCORD_CLANKER_CHANNEL_ID || 
-    !process.env.DISCORD_LARRY_CHANNEL_ID) {
-    console.error('Missing required environment variables: DISCORD_TOKEN, ALCHEMY_API_KEY, DISCORD_CLANKER_CHANNEL_ID, or DISCORD_LARRY_CHANNEL_ID');
+    !process.env.DISCORD_LARRY_CHANNEL_ID ||
+    !process.env.CLANKFUN_DEPLOYER_ROLE) {
+    console.error('Missing required environment variables: DISCORD_TOKEN, ALCHEMY_API_KEY, DISCORD_CLANKER_CHANNEL_ID, DISCORD_LARRY_CHANNEL_ID, or CLANKFUN_DEPLOYER_ROLE');
     process.exit(1);
 }
 

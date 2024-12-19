@@ -7,21 +7,26 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
 - 🔍 Monitors new token deployments in real-time through:
   - Clanker Factory
   - Larry Factory
+  - Clank.fun deployments
 - 📊 Provides detailed token information including:
   - Token name and symbol
-  - Contract address with links (Basescan, Dexscreener, Uniswap, Photon)
+  - Contract address with organized links:
+    - First line: Basescan, Dexscreener, GeckoTerminal
+    - Second line: Photon, Uniswap, Clank.fun
   - Deployer address with blockchain explorer links
-  - Farcaster ID (FID) with profile link and follower count
+  - Farcaster ID (FID) with profile link and follower count (for Farcaster deployments)
   - Supply details
   - LP NFT ID with Uniswap position link
-  - Launch cast link
+  - Launch cast link (for Farcaster deployments)
   - Token images (configurable)
 - 🎉 Larry Features:
   - Monitors new crowdfund/party creations
-  - Tracks contributions in real-time
-  - Updates original messages with contribution info
+  - Tracks contributions in real-time*
+  - Updates original messages with contribution info*
   - Shows progress and deadlines
+  > **Note:** * Contribution tracking and progress updates are currently under development and may not be fully functional.
 - 🏷️ Role pinging system:
+  - Clank.fun deployment notifications
   - Low FID notifications (configurable threshold)
   - High follower count notifications
   - Multiple threshold levels for fine-grained alerts
@@ -36,8 +41,14 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
   - Graceful shutdown handling
   - Service health monitoring (checks every minute, logs every 15 minutes)
 - 🧠 Smart Filtering:
+  - Distinguishes between Farcaster and Clank.fun deployments
   - Avoids notifications for Clankers deployed by 0-follower accounts
   - Configurable thresholds for notifications
+- 🎨 Visual Indicators:
+  - Orange embeds for Clank.fun deployments
+  - Green embeds for low FID deployments
+  - Purple embeds for high follower deployments
+  - Blue embeds for standard deployments
 
 ## Prerequisites
 
@@ -153,6 +164,9 @@ The bot requires several environment variables to be set:
 - `FOLLOWERS_OVER_50000_ROLE`: Role ID for accounts with 50,000+ followers
 - `FOLLOWERS_OVER_100000_ROLE`: Role ID for accounts with 100,000+ followers
 - `FOLLOWERS_OVER_200000_ROLE`: Role ID for accounts with 200,000+ followers
+
+### Platform Role Variables
+- `CLANKFUN_DEPLOYER_ROLE`: Role ID for clank.fun deployments 🤖
 
 Copy `.env.example` to `.env` and fill in your values.
 
@@ -322,6 +336,12 @@ The bot automatically tags all relevant roles for each new token. This means:
   - Over 10,000 role ✨ (because 120k > 10k)
   - Over 5,000 role 📈 (because 120k > 5k)
 
+**For Platform Deployments:**
+- If a token is deployed through clank.fun:
+  - Clank.fun deployer role 🤖
+  - FID and follower notifications are not triggered
+  - Displays orange embed color
+
 ### Available Roles
 **FID Thresholds:**
 - Below 1,000 🔥
@@ -336,6 +356,9 @@ The bot automatically tags all relevant roles for each new token. This means:
 - Over 100,000 🚀
 - Over 200,000 🌟
 
+**Platform:**
+- Clank.fun Deployer 🤖
+
 ### Selecting Your Roles
 1. **For FID notifications:**
    - Select roles for the FID ranges you want to monitor
@@ -347,15 +370,21 @@ The bot automatically tags all relevant roles for each new token. This means:
    - You'll get notifications for all accounts ABOVE your selected numbers
    - Example: "Over 20k" role will notify you about accounts with 20k+ followers
 
-3. **Want both?**
-   - Select both FID and follower roles
-   - You'll get notifications when EITHER condition is met
+3. **For platform notifications:**
+   - Select the clank.fun role to get notifications for all tokens deployed through clank.fun
+   - These notifications are independent of FID/follower thresholds
+
+4. **Want multiple?**
+   - Select any combination of roles
+   - You'll get notifications when ANY of your selected conditions are met
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 I had issues integrating basename resolution because all examples I found in docs are react components. ENS resolution was easy, but seemed to unnecessarily slow down processing. If you can integrate these efficiently, I'd love to display them.
+
+Larry contribution tracking and progress updates are currently not functioning as expected. If you can help with this, I'd love to get it working properly.
 
 ## Author
 
