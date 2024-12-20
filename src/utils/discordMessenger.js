@@ -154,8 +154,11 @@ async function sendClankerMessage(tokenData, event, discord, timings = {}) {
             timings.warpcastFetch = warpcastData.timing;
         }
 
+        // Check if it's a clank.fun deployment
+        const isClankFun = tokenData.castHash?.toLowerCase().includes('clank.fun');
+
         const embed = new EmbedBuilder()
-            .setColor(determineEmbedColor(tokenData.fid, warpcastData?.followerCount))
+            .setColor(determineEmbedColor(isClankFun ? 0 : tokenData.fid, warpcastData?.followerCount))
             .setTitle('🚀 New Clanker Token Deployed')
             .addFields(createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData))
             .setTimestamp();
@@ -201,13 +204,13 @@ async function sendLarryMessage(tokenData, discord) {
 }
 
 function determineEmbedColor(fid, followers) {
-    let embedColor = '#0099ff'; // default blue
-
     // Check for clank.fun deployment (fid will be 0)
     if (fid === 0) {
-        embedColor = '#ff9900'; // orange for clank.fun deployments
-        return embedColor;
+        return '#ff9900'; // orange for clank.fun deployments
     }
+
+    // Default blue
+    let embedColor = '#0099ff';
 
     // FID colors (greens)
     if (fid < settings.fidThresholds.below1000) {
