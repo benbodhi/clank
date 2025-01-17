@@ -151,11 +151,8 @@ async function sendClankerMessage(tokenData, event, discord, timings = {}) {
         const photonLink = tokenData.poolAddress ? 
             ` | **[Photon](https://photon-base.tinyastro.io/en/lp/${tokenData.poolAddress})**` : '';
 
-        // Fetch Warpcast data
-        const warpcastData = await getWarpcastUserData(tokenData.fid);
-        if (warpcastData?.timing) {
-            timings.warpcastFetch = warpcastData.timing;
-        }
+        // Use the warpcastData that was passed in with tokenData
+        const warpcastData = tokenData.warpcastData;
 
         // Check if it's a clank.fun deployment
         const isClankFun = tokenData.castHash?.toLowerCase().includes('clank.fun');
