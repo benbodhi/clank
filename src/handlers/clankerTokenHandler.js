@@ -58,7 +58,10 @@ async function handleClankerToken({
         if (warpcastData && 
             warpcastData.followerCount === 0 && 
             !castHash?.toLowerCase().includes('clank.fun')) {
-            logger.detail('Skipping notification for 0 follower FID', fid);
+            logger.section('⚠️ Skipping Discord Notification');
+            logger.detail('Reason', '0 follower account');
+            logger.detail('FID', fid);
+            logger.detail('Username', warpcastData.username);
             logger.sectionEnd();
             return;
         }
