@@ -98,11 +98,11 @@ function createClankerMessageContent(tokenData, warpcastData) {
     const followers = warpcastData?.followerCount || 0;
     
     if (platform === 'clankfun') {
-        messages.push(`**<@&${process.env.CLANKFUN_DEPLOYER_ROLE}> 🤖**\n`);
-        messages.push(`\n**Clank.fun Deployment**`);
+        messages.push(`**<@&${process.env.CLANKFUN_DEPLOYER_ROLE}> 🤖**`);
+        messages.push(`**Clank.fun Deployment**`);
     } else if (platform === 'bolide') {
-        messages.push(`**<@&${process.env.BOLIDE_DEPLOYER_ROLE}> 🟣**\n`);
-        messages.push(`\n**Bolide Deployment**`);
+        messages.push(`**<@&${process.env.BOLIDE_DEPLOYER_ROLE}> 🟣**`);
+        messages.push(`**Bolide Deployment**`);
     } else {
         // FID-based notifications
         if (fid < settings.fidThresholds.below1000) {
@@ -125,19 +125,14 @@ function createClankerMessageContent(tokenData, warpcastData) {
                 }
             }
         }
-    }
-    
-    if (messages.length > 0) {
-        if (platform === 'clankfun') {
-            messages.push(`\n**Clank.fun Deployment**`);
-        } else if (platform === 'bolide') {
-            messages.push(`\n**Bolide Deployment**`);
-        } else {
-            messages.push(`\n**FID: ${fid.toLocaleString()} | Followers: ${followers.toLocaleString()}**`);
+        
+        // Add FID and follower info for standard deployments
+        if (messages.length > 0) {
+            messages.push(`**FID: ${fid.toLocaleString()} | Followers: ${followers.toLocaleString()}**`);
         }
     }
     
-    return messages.join('');
+    return messages.join('\n');
 }
 
 function getFollowerEmoji(threshold) {
