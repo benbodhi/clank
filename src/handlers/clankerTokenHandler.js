@@ -37,6 +37,17 @@ async function handleClankerToken({
     const startTime = Date.now();
 
     try {
+        // Get Warpcast data first
+        const warpcastData = await getWarpcastUserData(fid);
+        
+        // Skip notifications for 0 follower accounts unless it's a clank.fun deployment
+        if (warpcastData && 
+            warpcastData.followerCount === 0 && 
+            !castHash?.toLowerCase().includes('clank.fun')) {
+            logger.detail('Skipping notification for 0 follower account', fid);
+            return;
+        }
+
         logger.section('📝 New Clanker Token Deployment');
         logger.detail('Token Name', `${name} (${symbol})`);
         logger.detail('Token Address', tokenAddress);
