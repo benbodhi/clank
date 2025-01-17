@@ -38,17 +38,6 @@ async function handleClankerToken({
     const startTime = Date.now();
 
     try {
-        // Get Warpcast data first
-        const warpcastData = await getWarpcastUserData(fid);
-        
-        // Skip notifications for 0 follower accounts unless it's a clank.fun deployment
-        if (warpcastData && 
-            warpcastData.followerCount === 0 && 
-            !castHash?.toLowerCase().includes('clank.fun')) {
-            logger.detail('Skipping notification for 0 follower account', fid);
-            return;
-        }
-
         logger.section('📝 New Clanker Token Deployment');
         logger.detail('Token Name', `${name} (${symbol})`);
         logger.detail('Token Address', tokenAddress);
@@ -59,6 +48,20 @@ async function handleClankerToken({
         logger.detail('Total Supply', formatSupplyWithCommas(supply));
         logger.detail('WETH Address', wethAddress);
         logger.detail('Cast Hash', castHash);
+
+        // Get Warpcast data
+        const warpcastFetchStart = Date.now();
+        const warpcastData = await getWarpcastUserData(fid);
+        timings.warpcastFetch = Date.now() - warpcastFetchStart;
+        
+        // Skip notifications for 0 follower accounts unless it's a clank.fun deployment
+        if (warpcastData && 
+            warpcastData.followerCount === 0 && 
+            !castHash?.toLowerCase().includes('clank.fun')) {
+            logger.detail('Skipping notification for 0 follower FID', fid);
+            logger.sectionEnd();
+            return;
+        }
 
         // Get pool address from transaction logs
         const poolResolutionStart = Date.now();
@@ -82,7 +85,7 @@ async function handleClankerToken({
         }
         timings.imageFetch = Date.now() - imageFetchStart;
 
-        // Send Discord message
+        // Send Discord message with warpcastData included
         await sendClankerMessage({
             name,
             symbol,
@@ -94,7 +97,8 @@ async function handleClankerToken({
             transactionHash: event.transactionHash,
             poolAddress,
             imageUrl,
-            castHash
+            castHash,
+            warpcastData  // Pass the already fetched data
         }, event, discord, timings);
 
         // Log timings
