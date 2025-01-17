@@ -1,40 +1,42 @@
 # Clank
 
-A Discord bot that monitors new token deployments on Base through both Clanker and Larry contracts, sending notifications to specified Discord channels with role tagging.
+A Discord bot that monitors new token deployments on Base through the Clanker Factory contract, sending notifications to specified Discord channels with role tagging.
 
 ## Features
 
-- 🔍 Monitors new token deployments in real-time through:
-  - Clanker Factory
-  - Larry Factory
+- 🔍 Monitors in real-time:
+  - Clanker Factory token deployments
+  - Clanker Presale launches
+  - Presale contributions
   - Clank.fun deployments
-- 📊 Provides detailed token information including:
-  - Token name and symbol
-  - Contract address with organized links:
-    - First line: Basescan, Dexscreener, GeckoTerminal
-    - Second line: Photon, Uniswap, Clank.fun
-  - Deployer address with blockchain explorer links
-  - Farcaster ID (FID) with profile link and follower count (for Farcaster deployments)
-  - Supply details
-  - LP NFT ID with Uniswap position link
-  - Launch cast link (for Farcaster deployments)
-  - Token images (configurable)
-- 🎉 Larry Features:
-  - Monitors new crowdfund/party creations
-  - Tracks contributions in real-time*
-  - Updates original messages with contribution info*
-  - Shows progress and deadlines
-  > **Note:** * Contribution tracking and progress updates are currently under development and may not be fully functional.
+- 📊 Provides detailed information including:
+  - Token deployments:
+    - Name and symbol
+    - Contract address with organized links:
+      - First line: Basescan, Dexscreener, GeckoTerminal
+      - Second line: Photon, Uniswap, Clank.fun
+    - Deployer address with blockchain explorer links
+    - Farcaster ID (FID) with profile link and follower count
+    - Supply details
+    - LP NFT ID with Uniswap position link
+    - Launch cast link
+  - Presale launches:
+    - Token details and supply
+    - Available supply percentage
+    - Presale goal in ETH
+    - Example purchase tiers
+    - End time countdown
+    - Direct link to Clanker World presale page
+  - Presale contributions:
+    - Buyer address
+    - ETH amount
+    - BPS purchased
+    - Transaction details
 - 🏷️ Role pinging system:
   - Clank.fun deployment notifications
   - Low FID notifications (configurable threshold)
   - High follower count notifications
   - Multiple threshold levels for fine-grained alerts
-- 💾 Persistent Storage:
-  - Redis-based message tracking
-  - Thread ID persistence
-  - Contribution history
-  - Duplicate transaction prevention
 - 🔄 Reliability Features:
   - Automatic WebSocket reconnection with exponential backoff
   - Resilient error handling and logging
@@ -49,12 +51,13 @@ A Discord bot that monitors new token deployments on Base through both Clanker a
   - Green embeds for low FID deployments
   - Purple embeds for high follower deployments
   - Blue embeds for standard deployments
+  - Yellow embeds for presale launches
+  - Green embeds for presale contributions
 
 ## Prerequisites
 
 - Node.js v18 or higher
 - npm or yarn
-- Redis (local development)
 - Discord bot token
 - Discord channel ID
 - Alchemy API key for Base network
@@ -71,33 +74,21 @@ clank/
 │   │   ├── abis/
 │   │   │   ├── clanker/
 │   │   │   │   └── Factory.json
-│   │   │   ├── larry/
-│   │   │   │   ├── CrowdfundFactoryImpl.json
-│   │   │   │   ├── ERC20CreatorV3Impl.json
-│   │   │   │   ├── ERC20LaunchCrowdfundImpl.json
-│   │   │   │   ├── PartyFactory.json
-│   │   │   │   └── PartyImpl.json
 │   │   │   ├── token/
 │   │   │   │   └── Token.json
 │   │   │   └── uniswap/
 │   │   │       └── Factory.json
 │   │   ├── helpers/
-│   │   │   ├── ClankerContractHelper.js
-│   │   │   └── LarryContractHelper.js
+│   │   │   └── ClankerContractHelper.js
 │   │   ├── addresses.json
 │   │   └── utils.js
 │   ├── handlers/
 │   │   ├── clankerTokenHandler.js
-│   │   ├── errorHandler.js
-│   │   ├── larryContributedHandler.js
-│   │   ├── larryPartyCreatedHandler.js
-│   │   ├── larryPresaleEventHandler.js
-│   │   └── larryTokenHandler.js
+│   │   └── errorHandler.js
 │   ├── services/
 │   │   └── warpcastResolver.js
 │   ├── utils/
 │   │   ├── discordMessenger.js
-│   │   ├── larryCrowdfundStore.js
 │   │   └── logger.js
 │   └── bot.js
 ├── .env
@@ -117,28 +108,15 @@ The bot's configuration is split into multiple files:
   - FID Thresholds for role notifications
   - Follower Thresholds for role notifications
   - Features toggles (e.g., `displayImages`)
-  - Larry configuration options
 
 ### Contract Configuration
 - `src/contracts/addresses.json`: Contract addresses for:
   - Clanker Factory
-  - Larry Factory
-  - Larry Crowdfund Implementation
   - Uniswap V3 Factory
-
-### Data Storage
-- Redis for persistent storage:
-  - Discord message IDs
-  - Thread IDs
-  - Contribution tracking
-  - Transaction history
-  - Message update history
 
 ### Message Templates
 - `src/utils/discordMessenger.js`: Discord message formatting for:
   - Clanker token deployments
-  - Larry Crowdfund/Party creations
-  - Contribution updates
   - Embedded message layouts
 
 ## Environment Variables
@@ -149,8 +127,7 @@ The bot requires several environment variables to be set:
 - `ALCHEMY_API_KEY`: Alchemy API key for Base network
 - `DISCORD_TOKEN`: Your Discord bot token
 - `DISCORD_CLANKER_CHANNEL_ID`: Channel ID for Clanker notifications
-- `DISCORD_LARRY_CHANNEL_ID`: Channel ID for Larry notifications
-- `REDIS_URL`: Redis connection URL (defaults to localhost for development)
+- `CLANKFUN_DEPLOYER_ROLE`: Role ID for clank.fun deployments 🤖
 
 ### FID Role Variables
 - `FID_BELOW_1000_ROLE`: Role ID for FIDs under 1,000
@@ -164,9 +141,6 @@ The bot requires several environment variables to be set:
 - `FOLLOWERS_OVER_50000_ROLE`: Role ID for accounts with 50,000+ followers
 - `FOLLOWERS_OVER_100000_ROLE`: Role ID for accounts with 100,000+ followers
 - `FOLLOWERS_OVER_200000_ROLE`: Role ID for accounts with 200,000+ followers
-
-### Platform Role Variables
-- `CLANKFUN_DEPLOYER_ROLE`: Role ID for clank.fun deployments 🤖
 
 Copy `.env.example` to `.env` and fill in your values.
 
@@ -183,20 +157,9 @@ cd clank
 npm install
 ```
 
-3. Install Redis (for local development):
-```bash
-# Mac
-brew install redis
-brew services start redis
+3. Set up your environment variables in `.env`
 
-# Linux
-sudo apt-get install redis-server
-sudo systemctl start redis
-```
-
-4. Set up your environment variables in `.env`
-
-5. Start the bot:
+4. Start the bot:
 ```bash
 npm start
 ```
@@ -205,9 +168,8 @@ npm start
 
 The bot includes comprehensive error handling:
 - Automatic WebSocket reconnection
-- Redis connection retry logic
-- Graceful shutdown on process termination
 - Detailed error logging with timestamps
+- Graceful shutdown handling
 - Service health monitoring
 
 ## Deployment
@@ -220,9 +182,7 @@ The bot can be deployed on platforms like Railway:
 
 2. **Deploy on Railway**
    - Create new project from GitHub repo
-   - Add Redis service
-   - Link Redis URL to bot service
-   - Set remaining environment variables
+   - Set environment variables
    - Deploy using `npm start`
 
 ## Discord Bot Setup
@@ -384,8 +344,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 I had issues integrating basename resolution because all examples I found in docs are react components. ENS resolution was easy, but seemed to unnecessarily slow down processing. If you can integrate these efficiently, I'd love to display them.
 
-Larry contribution tracking and progress updates are currently not functioning as expected. If you can help with this, I'd love to get it working properly.
-
 ## Author
 
 **Benbodhi**
@@ -401,7 +359,7 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 Built for the Base ecosystem
 - We love Base
-- We love Clanker & Larry
+- We love Clanker
 - We love Warpcast
 - We love Discord
 
@@ -413,7 +371,6 @@ Powered By:
 - Warpcast API for Farcaster data
 - Winston for structured logging
 - Alchemy for WebSocket provider
-- Redis for persistent data storage
 - MEE6 for role management integration
 - Uniswap V3 for trading interface
 - Photon for faster trading interface

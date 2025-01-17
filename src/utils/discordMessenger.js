@@ -2,9 +2,8 @@ const { EmbedBuilder } = require('discord.js');
 const { settings } = require('../config');
 const { getWarpcastUserData } = require('../services/warpcastResolver');
 const { handleError } = require('../handlers/errorHandler');
-const { ethers } = require('ethers');
+const { ethers, formatUnits } = require('ethers');
 const logger = require('./logger');
-const { getCrowdfund, updateThreadId } = require('./larryCrowdfundStore');
 
 // Utility Functions
 function formatDeployerField(address) {
@@ -73,7 +72,11 @@ function createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, ph
 
     fields.push(
         { name: 'Total Supply', value: tokenData.totalSupply, inline: false },
-        { name: 'LP Position', value: `**[${tokenData.positionId}](https://app.uniswap.org/#/pool/${tokenData.positionId})**`, inline: false }
+        { 
+            name: 'LP Position', 
+            value: `**[${tokenData.positionId}](https://app.uniswap.org/positions/v3/base/${tokenData.positionId})**`, 
+            inline: false 
+        }
     );
 
     return fields;
@@ -177,32 +180,6 @@ async function sendClankerMessage(tokenData, event, discord, timings = {}) {
     }
 }
 
-async function sendLarryMessage(tokenData, discord) {
-    try {
-        const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
-        if (!channel) {
-            throw new Error('Could not find Larry Discord channel');
-        }
-
-        const embed = new EmbedBuilder()
-            .setTitle('🦜 New Larry Token Deployed')
-            .setColor(0x00ff00)
-            .addFields([
-                { name: 'Name', value: tokenData.name, inline: true },
-                { name: 'Symbol', value: tokenData.symbol, inline: true },
-                { name: 'Token Address', value: `[${tokenData.tokenAddress}](https://basescan.org/address/${tokenData.tokenAddress})`, inline: false },
-                { name: 'Deployer', value: formatDeployerField(tokenData.deployer), inline: false },
-                { name: 'Initial ETH', value: `${tokenData.ethValue} ETH`, inline: true }
-            ])
-            .setTimestamp();
-
-        await channel.send({ embeds: [embed] });
-    } catch (error) {
-        handleError(error, 'Larry Discord Message');
-        throw error;
-    }
-}
-
 function determineEmbedColor(fid, followers) {
     // Check for clank.fun deployment (fid will be 0)
     if (fid === 0) {
@@ -239,227 +216,152 @@ function determineEmbedColor(fid, followers) {
     return embedColor;
 }
 
-function formatCountdown(endTime) {
-    const now = Math.floor(Date.now() / 1000);
-    const remaining = endTime - now;
-    
-    if (remaining <= 0) return "Presale Ended";
-    
-    const minutes = Math.floor(remaining / 60);
-    const seconds = remaining % 60;
-    return `⏰ ${minutes}m ${seconds}s remaining`;
-}
-
-async function sendLarryPartyMessage({
-    creator,
-    crowdfund,
-    party,
-    tokenName,
-    tokenSymbol,
-    tokenAddress,
-    totalSupply,
-    endTime,
-    larryUrl
-}, discord) {
-    const embed = new EmbedBuilder()
-        .setColor(0x0099FF)
-        .setTitle(`🎉 New Larry Party: ${tokenName}`)
-        .setDescription(`A new Larry Party has been created for ${tokenName} (${tokenSymbol})`)
-        .addFields(
-            { name: 'Creator', value: `[${creator}](https://basescan.org/address/${creator})`, inline: true },
-            { name: 'Total Supply', value: `${totalSupply} tokens`, inline: true },
-            { name: 'End Time', value: `<t:${endTime}:R>`, inline: true },
-            { name: 'Crowdfund', value: `[View](https://basescan.org/address/${crowdfund})`, inline: true },
-            { name: 'Party', value: `[View](https://basescan.org/address/${party})`, inline: true },
-            tokenAddress ? { 
-                name: 'Token', 
-                value: `[View](https://basescan.org/address/${tokenAddress})`, 
-                inline: true 
-            } : { 
-                name: 'Token', 
-                value: 'Available after finalization', 
-                inline: true 
-            },
-            { name: 'Larry Club', value: `[View Party](${larryUrl})` }
-        )
-        .setTimestamp();
-
-    const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
-    return await channel.send({ embeds: [embed] });
-}
-
-async function sendLarryContributionMessage(contributionDetails, discord) {
+async function sendPresaleMessage(presaleData, event, discord, timings = {}) {
+    const messageStartTime = Date.now();
     try {
-        const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
-        if (!channel) {
-            throw new Error('Could not find Larry Discord channel');
-        }
-
-        const embed = new EmbedBuilder()
-            .setTitle('💰 New Contribution to Larry Party')
-            .setColor(0x00ff00)
-            .addFields([
-                { name: 'Party Address', value: `[${contributionDetails.partyAddress}](https://basescan.org/address/${contributionDetails.partyAddress})`, inline: false },
-                { name: 'Contributor', value: `[${contributionDetails.contributor}](https://basescan.org/address/${contributionDetails.contributor})`, inline: true },
-                { name: 'Amount', value: `${contributionDetails.amount} ETH`, inline: true },
-                { name: 'Total Contributed', value: `${contributionDetails.totalContributed} ETH`, inline: true }
-            ])
-            .setTimestamp();
-
-        await channel.send({ embeds: [embed] });
-    } catch (error) {
-        handleError(error, 'Larry Contribution Discord Message');
-        throw error;
-    }
-}
-
-async function updateLarryPartyMessage({ messageId, tokenName, tokenSymbol, larryUrl, newContribution }, discord) {
-    try {
-        logger.section('📝 Updating Larry Party Message');
-        const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
+        const channel = await discord.channels.fetch(process.env.DISCORD_CLANKER_CHANNEL_ID);
         if (!channel) {
             throw new Error('Discord channel not found');
         }
 
-        const message = await channel.messages.fetch(messageId);
-        if (!message) {
-            throw new Error('Message not found');
-        }
+        // Fetch Warpcast data
+        const warpcastStartTime = Date.now();
+        const warpcastData = await getWarpcastUserData(presaleData.fid);
+        timings.warpcastFetch = Date.now() - warpcastStartTime;
 
-        // Get crowdfund data to check for existing thread
-        const crowdfund = await getCrowdfund(newContribution.crowdfundAddress);
-        if (!crowdfund) {
-            throw new Error('Crowdfund data not found');
-        }
+        const deployerField = formatDeployerField(presaleData.deployer);
+        const isClankFun = presaleData.castHash?.toLowerCase().includes('clank.fun');
 
-        // Get or create thread
-        let thread;
-        if (crowdfund.threadId) {
-            try {
-                thread = await channel.threads.fetch(crowdfund.threadId);
-            } catch (error) {
-                logger.warn('Could not fetch existing thread:', error.message);
-            }
-        }
-
-        if (!thread) {
-            thread = await message.startThread({
-                name: `${tokenName} (${tokenSymbol}) Contributions`,
-                autoArchiveDuration: 1440 // 24 hours
-            });
-            // Store thread ID in Redis
-            await updateThreadId(newContribution.crowdfundAddress, thread.id);
-            logger.detail('Created New Thread', thread.id);
-        }
-
-        // Send contribution update to thread
-        const contributionEmbed = new EmbedBuilder()
-            .setColor(0x00ff00)
-            .setTitle('New Contribution')
-            .addFields([
-                { name: 'Contributor', value: `[${newContribution.contributor}](https://basescan.org/address/${newContribution.contributor})`, inline: true },
-                { name: 'Amount', value: `${newContribution.amount} ETH`, inline: true },
-                { name: 'Total', value: `${newContribution.totalContributed} ETH`, inline: true },
-                { name: 'Transaction', value: `[View](https://basescan.org/tx/${newContribution.transactionHash})`, inline: true }
-            ])
+        // Create embed with yellow color
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle('🎯 New Clanker Presale')
+            .addFields(createPresaleEmbedFields(presaleData, deployerField, warpcastData))
             .setTimestamp();
 
-        await thread.send({ embeds: [contributionEmbed] });
+        // Create content for pings using existing logic
+        const content = createPresaleMessageContent(presaleData, warpcastData);
 
-        // Update the main message with total contributed
-        const embed = EmbedBuilder.from(message.embeds[0]);
-        const totalField = embed.data.fields.find(f => f.name === 'Total Contributed');
-        if (!totalField) {
-            embed.addFields({ name: 'Total Contributed', value: `${newContribution.totalContributed} ETH`, inline: true });
-        } else {
-            totalField.value = `${newContribution.totalContributed} ETH`;
-        }
+        await channel.send({ content, embeds: [embed] });
+        timings.discordSend = Date.now() - messageStartTime;
 
-        await message.edit({ embeds: [embed] });
-        logger.detail('Message Updated', messageId);
-        logger.sectionEnd();
     } catch (error) {
-        const isNetworkError = handleError(error, 'Discord Message Update');
-        if (isNetworkError) throw error;
+        handleError(error, 'Presale Message Send');
+        throw error;
     }
 }
 
-// Helper function to shorten addresses
-function shortenAddress(address) {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
+function createPresaleEmbedFields(presaleData, deployerField, warpcastData) {
+    const isClankFun = presaleData.castHash?.toLowerCase().includes('clank.fun');
+    const farcasterValue = warpcastData ? 
+        `${presaleData.fid} | **[${warpcastData.username}](https://warpcast.com/~/profiles/${presaleData.fid})** | ${warpcastData.followerCount.toLocaleString()} followers` :
+        `${presaleData.fid}`;
 
-async function sendTradeMessage({ tokenAddress, messageId, provider, discord }) {
-    try {
-        const channel = await discord.channels.fetch(process.env.DISCORD_LARRY_CHANNEL_ID);
-        if (!channel) {
-            throw new Error('Could not find Larry Discord channel');
-        }
+    // Calculate presale amounts
+    const presaleTokenAmount = (Number(presaleData.bpsAvailable) / 10000) * Number(presaleData.totalSupply);
+    const presaleEthPrice = Number(presaleData.ethPerBps);
+    const presalePercentage = (Number(presaleData.bpsAvailable) / 100).toFixed(2);
+    const totalPresaleEth = (Number(presaleData.bpsAvailable) * presaleEthPrice).toFixed(4);
 
-        // Get the original message
-        const originalMessage = await channel.messages.fetch(messageId);
-        if (!originalMessage) {
-            throw new Error('Could not find original message');
-        }
+    // Calculate example purchases
+    const examplePurchases = [
+        { eth: '0.01', percentage: '0.10' },
+        { eth: '0.05', percentage: '0.50' },
+        { eth: '0.10', percentage: '1.00' }
+    ];
 
-        // Fetch the pool address with error handling
-        let poolAddress;
-        try {
-            poolAddress = await getPoolAddress(tokenAddress, provider);
-            logger.detail('Pool Address Retrieved', poolAddress);
-        } catch (error) {
-            logger.warn('Failed to get pool address:', error.message);
-            poolAddress = null;
-        }
+    const fields = [
+        { name: 'Token Name', value: presaleData.name, inline: true },
+        { name: 'Ticker', value: presaleData.symbol, inline: true },
+        { 
+            name: 'Presale Details', 
+            value: [
+                `• Total Supply: ${Number(presaleData.totalSupply).toLocaleString()} ${presaleData.symbol}`,
+                `• Supply Available: ${presalePercentage}%`,
+                `• Presale Goal: ${totalPresaleEth} ETH`,
+                `• End: <t:${presaleData.endTime}:R>`,
+                `**[View on Clanker World](https://www.clanker.world/presale/${presaleData.preSaleId})**`,
+                `\n**Example Purchases:**`,
+                ...examplePurchases.map(p => `• ${p.eth} ETH = ${p.percentage}% of supply`)
+            ].join('\n'),
+            inline: false 
+        },
+        { name: 'Deployer', value: deployerField, inline: false }
+    ];
 
-        const photonLink = poolAddress ? ` | **[Photon](https://photon-base.tinyastro.io/en/lp/${poolAddress})**` : '';
-        const tradeLinks = `${tokenAddress}\n**[Basescan](https://basescan.org/token/${tokenAddress})** | **[Dexscreener](https://dexscreener.com/base/${tokenAddress})** | **[Uniswap](https://app.uniswap.org/#/swap?chain=base&outputCurrency=${tokenAddress})**${photonLink}`;
-
-        // Update the original message
-        const originalEmbed = originalMessage.embeds[0];
-        const updatedEmbed = EmbedBuilder.from(originalEmbed);
-        
-        // Find the Token Contract field and update it
-        const tokenFieldIndex = originalEmbed.fields.findIndex(field => field.name === 'Token Contract');
-        if (tokenFieldIndex !== -1) {
-            updatedEmbed.spliceFields(tokenFieldIndex, 1, { 
-                name: 'Token Contract', 
-                value: tradeLinks,
+    if (!isClankFun) {
+        fields.push({ 
+            name: 'FID', 
+            value: farcasterValue, 
+            inline: false 
+        });
+        if (presaleData.castHash) {
+            fields.push({ 
+                name: 'Cast', 
+                value: `**[View Launch Cast](https://warpcast.com/~/conversations/${presaleData.castHash})**`, 
                 inline: false 
             });
         }
+    }
 
-        await originalMessage.edit({ embeds: [updatedEmbed] });
+    return fields;
+}
 
-        // Send new message as a reply
-        const tradeEmbed = new EmbedBuilder()
-            .setTitle('🎉 LP Deployed - Start Trading!')
-            .setColor(0x0099ff) // Discord blue
-            .addFields([
+function createPresaleMessageContent(presaleData, warpcastData) {
+    const mentions = [];
+    
+    // Add role mentions based on FID and follower count
+    if (presaleData.castHash?.toLowerCase().includes('clank.fun')) {
+        mentions.push(`<@&${process.env.CLANKFUN_DEPLOYER_ROLE}>`);
+    } else {
+        // Add FID-based role mentions
+        const fid = parseInt(presaleData.fid);
+        if (fid < 1000) mentions.push(`<@&${process.env.FID_BELOW_1000_ROLE}>`);
+        else if (fid < 5000) mentions.push(`<@&${process.env.FID_BELOW_5000_ROLE}>`);
+        else if (fid < 10000) mentions.push(`<@&${process.env.FID_BELOW_10000_ROLE}>`);
+
+        // Add follower-based role mentions
+        if (warpcastData?.followerCount >= 100000) mentions.push(`<@&${process.env.FOLLOWERS_OVER_100000_ROLE}>`);
+        else if (warpcastData?.followerCount >= 50000) mentions.push(`<@&${process.env.FOLLOWERS_OVER_50000_ROLE}>`);
+        else if (warpcastData?.followerCount >= 20000) mentions.push(`<@&${process.env.FOLLOWERS_OVER_20000_ROLE}>`);
+        else if (warpcastData?.followerCount >= 10000) mentions.push(`<@&${process.env.FOLLOWERS_OVER_10000_ROLE}>`);
+        else if (warpcastData?.followerCount >= 5000) mentions.push(`<@&${process.env.FOLLOWERS_OVER_5000_ROLE}>`);
+    }
+
+    return mentions.length ? mentions.join(' ') : '';
+}
+
+async function sendPresaleContributionMessage({ preSaleId, buyer, bpsAmount, ethAmount, transactionHash }, event, discord) {
+    try {
+        const channel = await getChannel(discord);
+        if (!channel) return;
+
+        const embed = new EmbedBuilder()
+            .setColor(0x00ff00)
+            .setTitle('🎯 New Presale Purchase')
+            .addFields(
                 { 
-                    name: 'Token Contract', 
-                    value: tradeLinks,
-                    inline: false 
+                    name: 'Presale Details', 
+                    value: [
+                        `**ID:** ${preSaleId}`,
+                        `**Buyer:** [${shortenAddress(buyer)}](https://basescan.org/address/${buyer})`,
+                        `**Amount:** ${ethAmount} ETH for ${bpsAmount} BPS`,
+                        `**Transaction:** [View on Basescan](https://basescan.org/tx/${transactionHash})`
+                    ].join('\n')
                 }
-            ])
-            .setTimestamp();
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Clanker Bot' });
 
-        await channel.send({ 
-            embeds: [tradeEmbed],
-            reply: { messageReference: messageId, failIfNotExists: false }
-        });
+        await channel.send({ embeds: [embed] });
 
     } catch (error) {
-        handleError(error, 'Trade Message');
-        throw error;
+        handleError(error, 'Presale Purchase Message');
     }
 }
 
 module.exports = { 
     sendClankerMessage,
-    sendLarryMessage,
-    sendLarryPartyMessage,
-    sendLarryContributionMessage,
-    updateLarryPartyMessage,
-    sendTradeMessage
+    sendPresaleMessage,
+    sendPresaleContributionMessage
 }; 

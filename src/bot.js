@@ -7,9 +7,8 @@ require('dotenv').config();
 if (!process.env.DISCORD_TOKEN || 
     !process.env.ALCHEMY_API_KEY || 
     !process.env.DISCORD_CLANKER_CHANNEL_ID || 
-    !process.env.DISCORD_LARRY_CHANNEL_ID ||
     !process.env.CLANKFUN_DEPLOYER_ROLE) {
-    console.error('Missing required environment variables: DISCORD_TOKEN, ALCHEMY_API_KEY, DISCORD_CLANKER_CHANNEL_ID, DISCORD_LARRY_CHANNEL_ID, or CLANKFUN_DEPLOYER_ROLE');
+    console.error('Missing required environment variables: DISCORD_TOKEN, ALCHEMY_API_KEY, DISCORD_CLANKER_CHANNEL_ID, or CLANKFUN_DEPLOYER_ROLE');
     process.exit(1);
 }
 
@@ -24,20 +23,13 @@ const { settings } = require('./config');
 // Local imports: handlers
 const { handleError } = require('./handlers/errorHandler');
 const { handleClankerToken } = require('./handlers/clankerTokenHandler');
-const { handleLarryToken } = require('./handlers/larryTokenHandler');
-const { handleLarryPartyCreated } = require('./handlers/larryPartyCreatedHandler');
-const { handleLarryContributed } = require('./handlers/larryContributedHandler');
-const { handlePresaleFinalized, handlePresaleRefunded } = require('./handlers/larryPresaleEventHandlers');
-
-// Local imports: contract helpers
-const LarryContractHelper = require('./contracts/helpers/LarryContractHelper');
-const ClankerContractHelper = require('./contracts/helpers/ClankerContractHelper');
+const { handlePresaleCreated, handlePresalePurchase } = require('./handlers/presaleHandler');
 
 const logger = require('./utils/logger');
-const { getActiveCrowdfunds, addCrowdfund, updateCrowdfundStatus } = require('./utils/larryCrowdfundStore');
 
 const MAX_RETRIES = 5;
-const redisStore = require('./utils/redisStore');
+
+const ClankerContractHelper = require('./contracts/helpers/ClankerContractHelper');
 
 class ClankerBot {
     constructor() {
@@ -49,7 +41,6 @@ class ClankerBot {
         this.healthCheckInterval = null;
         this.reconnectAttempts = 0;
         this.initCount = 0;
-        this.activeCrowdfundListeners = new Map();
         
         this.setupCleanupHandlers();
         this.initialize();
@@ -83,9 +74,6 @@ class ClankerBot {
         
         try {
             logger.section('🚀 Initializing Bot');
-            
-            // Connect to Redis first
-            await redisStore.connect();
 
             // Initialize provider with WebSocket
             logger.detail('Starting WebSocket Provider...');
@@ -98,21 +86,17 @@ class ClankerBot {
             );
 
             await this.provider.ready;
-            logger.detail('Provider Connected');
+            logger.detail('✅ Provider Connected');
 
             // Initialize Discord client
             await this.initializeDiscord();
-            logger.detail('Discord client ready');
+            logger.detail('✅ Discord client ready');
             logger.sectionEnd();
 
             // Initialize contract helpers
             logger.section('🔄 Initializing Contract Monitoring');
-            this.larryContracts = new LarryContractHelper(this.provider);
             this.clankerContracts = new ClankerContractHelper(this.provider);
-            
-            logger.detail('Clanker Factory', this.clankerContracts.clankerFactory.target);
-            logger.detail('Larry Factory', this.larryContracts.larryFactory.target);
-            logger.detail('Larry Party Factory', this.larryContracts.partyFactory.target);
+            logger.detail('✅ All contracts initialized successfully');
             logger.sectionEnd();
 
             // Verify contracts
@@ -124,21 +108,17 @@ class ClankerBot {
             // Set up event listeners
             logger.section('🎯 Setting up Event Listeners');
             await this.setupEventListeners();
-            logger.detail('Larry Factory Listeners', '1');
-            logger.detail('Clanker Factory Listeners', '1');
-            logger.sectionEnd();
-
-            // Restore crowdfund listeners
-            logger.section('🔄 Restoring Crowdfund Listeners');
-            await this.restoreActiveCrowdfundListeners();
+            logger.detail('✅ All event listeners set up successfully');
             logger.sectionEnd();
 
             // Start health checks and ping/pong
+            logger.section('🔍 Starting Health Checks and Ping/Pong');
             this.startHealthCheck();
             this.startPingPong();
+            logger.sectionEnd();
 
             logger.section('🚀 Bot Initialization Complete');
-            logger.detail('👀 We are watching...');
+            logger.detail('👀 We are clanking...');
             logger.sectionEnd();
 
             this.initCount = 0; // Reset init count on successful initialization
@@ -185,8 +165,7 @@ class ClankerBot {
     async verifyContracts() {
         const contractsToVerify = [
             ['Clanker Factory', this.clankerContracts.clankerFactory],
-            ['Larry Factory', this.larryContracts.larryFactory],
-            ['Larry Party Factory', this.larryContracts.partyFactory]
+            ['Clanker Presale', this.clankerContracts.clankerPresale]
         ];
 
         for (const [name, contract] of contractsToVerify) {
@@ -199,33 +178,13 @@ class ClankerBot {
     }
 
     async setupEventListeners() {
-        // Setup Larry Factory listeners
-        this.larryContracts.larryFactory.on('ERC20LaunchCrowdfundCreated', 
-            async (creator, crowdfund, party, crowdfundOpts, partyOpts, tokenOpts, event) => {
-            try {
-                this.lastEventTime = Date.now(); // Update last event time
-                await handleLarryPartyCreated({
-                    creator,
-                    crowdfund,
-                    party,
-                    crowdfundOpts,
-                    partyOpts,
-                    tokenOpts,
-                    transactionHash: event.log.transactionHash,
-                    provider: this.provider,
-                    discord: this.discord,
-                    bot: this
-                });
-            } catch (error) {
-                handleError(error, 'Larry Factory Event Handler');
-            }
-        });
-
-        // Setup Clanker Factory listeners
+        // Setup Clanker Factory token creation listener
         this.clankerContracts.clankerFactory.on('TokenCreated', 
-            async (tokenAddress, positionId, deployer, fid, name, symbol, supply, lockerAddress, castHash, event) => {
+            async (tokenAddress, positionId, deployer, fid, name, symbol, supply, castHash, event) => {
             try {
-                this.lastEventTime = Date.now(); // Update last event time
+                this.lastEventTime = Date.now();
+                const wethAddress = await this.clankerContracts.clankerFactory.weth();
+
                 await handleClankerToken({
                     tokenAddress,
                     positionId,
@@ -234,92 +193,80 @@ class ClankerBot {
                     name,
                     symbol,
                     supply,
-                    lockerAddress,
+                    castHash,
+                    transactionHash: event.log.transactionHash,
+                    event: event.log,
+                    provider: this.provider,
+                    discord: this.discord,
+                    wethAddress
+                });
+            } catch (error) {
+                handleError(error, 'Clanker Factory Event Handler');
+            }
+        });
+
+        // Setup presale creation listener
+        this.clankerContracts.clankerPresale.on('PreSaleCreated',
+            async (preSaleId, bpsAvailable, ethPerBps, endTime, deployer, fid, name, symbol, supply, castHash, event) => {
+            try {
+                this.lastEventTime = Date.now();
+                await handlePresaleCreated({
+                    preSaleId,
+                    bpsAvailable,
+                    ethPerBps,
+                    endTime,
+                    deployer,
+                    fid,
+                    name,
+                    symbol,
+                    supply,
                     castHash,
                     event,
                     provider: this.provider,
                     discord: this.discord
                 });
             } catch (error) {
-                handleError(error, 'Clanker Factory Event Handler');
-            }
-        });
-    }
-
-    async restoreActiveCrowdfundListeners() {
-        const activeCrowdfunds = await getActiveCrowdfunds();
-        if (activeCrowdfunds.length > 0) {
-            logger.detail('Active Crowdfunds', activeCrowdfunds.length);
-            for (const { address } of activeCrowdfunds) {
-                await this.setupCrowdfundListener(address);
-            }
-        } else {
-            logger.detail('No active crowdfunds found');
-        }
-    }
-
-    async setupCrowdfundListener(address) {
-        const crowdfundContract = new ethers.Contract(
-            address,
-            require('./contracts/abis/larry/ERC20LaunchCrowdfundImpl.json'),
-            this.provider
-        );
-
-        // Add to active listeners map
-        this.activeCrowdfundListeners.set(address, crowdfundContract);
-
-        // Get past contribution events
-        const currentBlock = await this.provider.getBlockNumber();
-        const pastEvents = await crowdfundContract.queryFilter('Contributed', currentBlock - 10000, currentBlock);
-        
-        logger.detail('Past Contributions', `Found ${pastEvents.length} events for ${address}`);
-        
-        // Process past events
-        for (const event of pastEvents) {
-            try {
-                await handleLarryContributed(event, this.provider, this.discord);
-            } catch (error) {
-                handleError(error, 'Past Contribution Event Handler');
-            }
-        }
-
-        // Set up new event listeners
-        crowdfundContract.on('Contributed', async (sender, contributor, amount, delegate, event) => {
-            try {
-                await handleLarryContributed(event, this.provider, this.discord);
-            } catch (error) {
-                handleError(error, 'Larry Contribution Event Handler');
+                handleError(error, 'Presale Creation Handler');
             }
         });
 
-        // Set up finalize listener
-        crowdfundContract.on('Finalized', async (event) => {
+        // Watch for presale purchases by monitoring transactions
+        this.provider.on({
+            address: this.clankerContracts.clankerPresale.target,
+            topics: [
+                ethers.id('buyIntoPreSale(uint256)') // This creates the method signature hash
+            ]
+        }, async (log) => {
             try {
-                await handlePresaleFinalized(event, this.provider, this.discord);
-                await this.removeCrowdfundListener(address);
+                this.lastEventTime = Date.now();
+                
+                // Get the full transaction
+                const tx = await this.provider.getTransaction(log.transactionHash);
+                const receipt = await this.provider.getTransactionReceipt(log.transactionHash);
+                
+                // Decode the function data to get presaleId
+                const decodedData = this.clankerContracts.clankerPresale.interface.decodeFunctionData(
+                    'buyIntoPreSale',
+                    tx.data
+                );
+                
+                await handlePresalePurchase({
+                    preSaleId: decodedData[0], // First parameter is presaleId
+                    buyer: tx.from,
+                    ethAmount: tx.value, // Amount of ETH sent
+                    event: log,
+                    provider: this.provider,
+                    discord: this.discord
+                });
             } catch (error) {
-                handleError(error, 'Presale Finalized Event Handler');
+                handleError(error, 'Presale Purchase Handler');
             }
         });
 
-        // Set up refund listener
-        crowdfundContract.on('Refunded', async (event) => {
-            try {
-                await handlePresaleRefunded(event, this.provider, this.discord);
-                await this.removeCrowdfundListener(address);
-            } catch (error) {
-                handleError(error, 'Presale Refunded Event Handler');
-            }
-        });
-    }
-
-    async removeCrowdfundListener(address) {
-        const contract = this.activeCrowdfundListeners.get(address);
-        if (contract) {
-            contract.removeAllListeners();
-            this.activeCrowdfundListeners.delete(address);
-            logger.detail('Removed Listeners', address);
-        }
+        // Log setup completion
+        logger.detail('Clanker Factory Listeners', '1');
+        logger.detail('Presale Contract Listeners', '1');
+        logger.detail('Transaction Monitors', '1');
     }
 
     setupUncaughtHandlers() {
@@ -384,8 +331,6 @@ class ClankerBot {
         logger.warn('Connection lost, attempting to reconnect...');
 
         try {
-            // Store current listeners before cleanup
-            const currentListeners = new Map(this.activeCrowdfundListeners);
             
             await this.cleanup(false);
             this.isShuttingDown = false;
@@ -395,11 +340,6 @@ class ClankerBot {
             await new Promise(resolve => setTimeout(resolve, delay));
 
             await this.initialize();
-            
-            // Restore previous listeners
-            for (const [address] of currentListeners) {
-                await this.setupCrowdfundListener(address);
-            }
             
             this.isReconnecting = false;
             this.reconnectAttempts = 0;
@@ -427,34 +367,43 @@ class ClankerBot {
         logger.info('Shutting down services...');
         
         try {
-            // Disconnect Redis first
-            await redisStore.disconnect();
-            
             // Remove signal handlers first
             ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
                 process.removeAllListeners(signal);
             });
+
+            // Remove unhandled rejection handler to prevent logging during cleanup
+            process.removeAllListeners('unhandledRejection');
             
-            // Clean up crowdfund listeners
-            for (const [address, contract] of this.activeCrowdfundListeners) {
-                contract.removeAllListeners();
-                this.activeCrowdfundListeners.delete(address);
-                logger.detail('Removed Listener', address);
-            }
-            
-            // Clean up factory listeners
+            // Clean up factory listeners first
             if (this.clankerContracts?.clankerFactory) {
                 this.clankerContracts.clankerFactory.removeAllListeners();
             }
             
-            if (this.larryContracts?.larryFactory) {
-                this.larryContracts.larryFactory.removeAllListeners();
+            // Clean up presale listeners
+            if (this.clankerContracts?.clankerPresale) {
+                this.clankerContracts.clankerPresale.removeAllListeners();
             }
             
             // Clean up provider
             if (this.provider) {
+                // Remove all event listeners and subscriptions
                 this.provider.removeAllListeners();
-                await this.provider.destroy();
+                if (this.provider.websocket) {
+                    this.provider.websocket.removeAllListeners();
+                    // Force close the websocket
+                    this.provider.websocket.terminate();
+                }
+                
+                // Add a small delay to ensure all cleanup is complete
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                try {
+                    await this.provider.destroy();
+                } catch (error) {
+                    // Ignore provider destruction errors during cleanup
+                    logger.warn('Provider cleanup error (non-fatal):', error.message);
+                }
                 this.provider = null;
             }
 

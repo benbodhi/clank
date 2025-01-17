@@ -10,7 +10,7 @@ async function getWarpcastUserData(fid) {
     const startTime = Date.now();
     
     try {
-        logger.detail('Fetching Warpcast Data', `FID: ${fid}`);
+        logger.detail('Fetching Warpcast Data for FID', `${fid}`);
         const response = await fetch(`https://api.warpcast.com/v2/user-by-fid?fid=${fid}`);
         
         if (!response.ok) {
@@ -32,7 +32,7 @@ async function getWarpcastUserData(fid) {
             profileImage: data.result.user.pfp?.url
         };
 
-        logger.detail('Warpcast Data', `Retrieved (${result.username}, ${result.followerCount} followers)`);
+        logger.detail('Warpcast Data Retrieved', `(${result.username}, ${result.followerCount} followers)`);
         logger.timing('Warpcast Data Fetch', Date.now() - startTime);
         
         return result;

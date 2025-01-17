@@ -6,6 +6,13 @@ const addresses = require('../contracts/addresses.json');
 const logger = require('../utils/logger');
 const { ethers } = require('ethers');
 
+function formatSupplyWithCommas(supply) {
+    // Remove decimals and format with commas
+    return Number(formatUnits(supply, 18)).toLocaleString('en-US', {
+        maximumFractionDigits: 0
+    });
+}
+
 /**
  * Handles new token creation events
  * @param {Object} args - Event arguments from contract
@@ -20,70 +27,74 @@ async function handleClankerToken({
     name,
     symbol,
     supply,
-    lockerAddress,
     castHash,
     event,
     provider,
-    discord
+    discord,
+    wethAddress
 }) {
-    const startTime = Date.now();
     const timings = {};
-    
+    const startTime = Date.now();
+
     try {
         logger.section('📝 New Clanker Token Deployment');
         logger.detail('Token Name', `${name} (${symbol})`);
         logger.detail('Token Address', tokenAddress);
         logger.detail('Deployer', deployer);
         logger.detail('FID', fid);
-        logger.detail('Transaction', event.log.transactionHash);
-        logger.detail('LP NFT ID', positionId);
-        logger.detail('Total Supply', formatUnits(supply, 18));
-        logger.detail('Locker Address', lockerAddress);
+        logger.detail('Transaction', event.transactionHash);
+        logger.detail('LP NFT ID', positionId.toString());
+        logger.detail('Total Supply', formatSupplyWithCommas(supply));
+        logger.detail('WETH Address', wethAddress);
         logger.detail('Cast Hash', castHash);
-        
-        // Get pool address
-        const poolStartTime = Date.now();
-        const poolAddress = await getPoolAddress(event, provider);
-        logger.detail('Pool Address', poolAddress);
-        timings.poolResolution = Date.now() - poolStartTime;
-        
-        // Only fetch image if enabled in config
-        let imageUrl = null;
-        if (settings.features.displayImages) {
-            const imageStartTime = Date.now();
-            imageUrl = await getTokenImage(tokenAddress, provider);
-            logger.detail('Image URL', imageUrl);
-            timings.imageFetch = Date.now() - imageStartTime;
-        }
 
-        // Send Discord notification
+        // Get pool address from transaction logs
+        const poolResolutionStart = Date.now();
+        const poolAddress = await getPoolAddress(event.transactionHash, provider);
+        timings.poolResolution = Date.now() - poolResolutionStart;
+        logger.detail('Pool Address', poolAddress);
+
+        // Fetch image URL if available
+        const imageFetchStart = Date.now();
+        let imageUrl;
+        try {
+            const tokenContract = new ethers.Contract(
+                tokenAddress,
+                require('../contracts/abis/token/Token.json'),
+                provider
+            );
+            imageUrl = await tokenContract.image();
+            logger.detail('Image URL', imageUrl);
+        } catch (error) {
+            logger.warn('No image URL found');
+        }
+        timings.imageFetch = Date.now() - imageFetchStart;
+
+        // Send Discord message
         await sendClankerMessage({
-            tokenAddress,
-            positionId,
-            deployer,
-            fid,
             name,
             symbol,
-            totalSupply: Number(formatUnits(supply, 18)).toLocaleString(undefined, {
-                maximumFractionDigits: 0
-            }),
-            lockerAddress,
-            castHash,
+            tokenAddress,
+            deployer,
+            fid: fid.toString(),
+            positionId: positionId.toString(),
+            totalSupply: formatSupplyWithCommas(supply),
+            transactionHash: event.transactionHash,
             poolAddress,
-            ...(imageUrl && { imageUrl })
-        }, event.log, discord, timings);
+            imageUrl,
+            castHash
+        }, event, discord, timings);
 
-        // Log all timings together
+        // Log timings
         logger.section('⏱️  Timing Summary');
         if (timings.poolResolution) logger.timing('Pool Resolution', timings.poolResolution);
         if (timings.imageFetch) logger.timing('Image Fetch', timings.imageFetch);
-        if (timings.warpcastFetch) logger.timing('Warpcast Data Fetch', timings.warpcastFetch);
         if (timings.discordSend) logger.timing('Discord Message Send', timings.discordSend);
         logger.timing('Total Processing', Date.now() - startTime);
         logger.sectionEnd();
 
     } catch (error) {
-        const isNetworkError = handleError(error, 'Clanker Token Handler');
+        const isNetworkError = handleError(error, 'Token Creation Handler');
         if (isNetworkError) throw error;
     }
 }
@@ -94,9 +105,14 @@ async function handleClankerToken({
  * @param {ethers.Provider} provider - Ethers provider instance
  * @returns {Promise<string>} Pool address or empty string
  */
-async function getPoolAddress(event, provider) {
+async function getPoolAddress(txHash, provider) {
     try {
-        const txReceipt = await provider.getTransactionReceipt(event.log.transactionHash);
+        if (!txHash) {
+            logger.warn('No transaction hash provided');
+            return '';
+        }
+
+        const txReceipt = await provider.getTransactionReceipt(txHash);
         
         if (!txReceipt) {
             logger.warn('No transaction receipt found');

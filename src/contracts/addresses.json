@@ -1,14 +1,9 @@
 {
     "clanker": {
-        "factory": "0x732560fa1d1A76350b1A500155BA978031B53833"
-    },
-    "larry": {
-        "factory": "0x52e506B58ef5f60Ae74bD04C9bc37A63863Dfe5d",
-        "partyFactory": "0x68e9fc0e4d7af69ba64dd6827bfce5cd230b8f3d",
-        "partyImpl": "0xc30884e93b73df62234809341a4f8893a8908c30",
-        "crowdfundImpl": "0xe34b1b97dde54dcb82eca18317025f8e5fbb40aa"
+        "factory": "0x375C15db32D28cEcdcAB5C03Ab889bf15cbD2c5E",
+        "presale": "0x71cDc0bDF30F5601fb0ac80Cf1d20B771342C035"
     },
     "uniswap": {
-        "factory": "0x33128a8fc17869897dce68ed026d694621f6fdfd"
+        "factory": "0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
     }
 } 

@@ -1,7 +1,7 @@
 {
   "name": "clank",
   "version": "1.0.0",
-  "description": "Discord bot monitoring Base token deployments through Clanker and Larry",
+  "description": "Discord bot monitoring Base token deployments through Clanker",
   "main": "src/bot.js",
   "scripts": {
     "start": "node src/bot.js"
@@ -27,7 +27,6 @@
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
     "ethers": "^6.13.4",
-    "ioredis": "^5.3.2",
     "winston": "^3.17.0"
   },
   "engines": {
