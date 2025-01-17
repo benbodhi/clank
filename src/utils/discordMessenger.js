@@ -20,9 +20,18 @@ function createUniswapTradeLink(tokenAddress) {
     return `https://app.uniswap.org/#/swap?inputCurrency=ETH&outputCurrency=${tokenAddress}&chain=base`;
 }
 
+// Utility function to check deployment platform
+function getDeploymentPlatform(castHash) {
+    if (!castHash) return 'standard';
+    const hash = castHash.toLowerCase();
+    if (hash.includes('clank.fun')) return 'clankfun';
+    if (hash.includes('bolide')) return 'bolide';
+    return 'standard';
+}
+
 // Clanker-specific Functions
 function createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData) {
-    const isClankFun = tokenData.castHash?.toLowerCase().includes('clank.fun');
+    const platform = getDeploymentPlatform(tokenData.castHash);
     const farcasterValue = warpcastData ? 
         `${tokenData.fid} | **[${warpcastData.username}](https://warpcast.com/~/profiles/${tokenData.fid})** | ${warpcastData.followerCount.toLocaleString()} followers` :
         `${tokenData.fid}`;
@@ -56,8 +65,8 @@ function createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, ph
         { name: 'Deployer', value: deployerField, inline: false }
     ];
 
-    // Only add FID and Cast field if not a clank.fun deployment
-    if (!isClankFun) {
+    // Only add FID and Cast field if standard deployment
+    if (platform === 'standard') {
         fields.push({ 
             name: 'FID', 
             value: farcasterValue, 
@@ -84,13 +93,18 @@ function createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, ph
 
 function createClankerMessageContent(tokenData, warpcastData) {
     const messages = [];
+    const platform = getDeploymentPlatform(tokenData.castHash);
     const fid = Number(tokenData.fid);
     const followers = warpcastData?.followerCount || 0;
-    const isClankFun = tokenData.castHash?.toLowerCase().includes('clank.fun');
     
-    if (isClankFun) {
+    if (platform === 'clankfun') {
         messages.push(`**<@&${process.env.CLANKFUN_DEPLOYER_ROLE}> 🤖**\n`);
-    } else if (fid > 0) {  // Only show FID notifications for non-clank.fun and valid FIDs
+        messages.push(`\n**Clank.fun Deployment**`);
+    } else if (platform === 'bolide') {
+        messages.push(`**<@&${process.env.BOLIDE_DEPLOYER_ROLE}> 🟣**\n`);
+        messages.push(`\n**Bolide Deployment**`);
+    } else {
+        // FID-based notifications
         if (fid < settings.fidThresholds.below1000) {
             messages.push(`**<@&${process.env.FID_BELOW_1000_ROLE}> 🔥**\n`);
             messages.push(`**<@&${process.env.FID_BELOW_5000_ROLE}> 👀**\n`);
@@ -102,7 +116,7 @@ function createClankerMessageContent(tokenData, warpcastData) {
             messages.push(`**<@&${process.env.FID_BELOW_10000_ROLE}> 📊**\n`);
         }
         
-        // Follower threshold notifications (only for non-clank.fun and valid FIDs)
+        // Follower threshold notifications
         if (followers >= settings.followerThresholds.over5000) {
             const thresholds = [5000, 10000, 20000, 50000, 100000, 200000];
             for (const threshold of thresholds) {
@@ -114,9 +128,11 @@ function createClankerMessageContent(tokenData, warpcastData) {
     }
     
     if (messages.length > 0) {
-        if (isClankFun) {
+        if (platform === 'clankfun') {
             messages.push(`\n**Clank.fun Deployment**`);
-        } else if (fid > 0) {
+        } else if (platform === 'bolide') {
+            messages.push(`\n**Bolide Deployment**`);
+        } else {
             messages.push(`\n**FID: ${fid.toLocaleString()} | Followers: ${followers.toLocaleString()}**`);
         }
     }
@@ -177,7 +193,11 @@ async function sendClankerMessage(tokenData, event, discord, timings = {}) {
     }
 }
 
-function determineEmbedColor(fid, followers) {
+function determineEmbedColor(fid, followers, platform) {
+    // Platform-specific colors
+    if (platform === 'clankfun') return '#ff9900'; // orange for clank.fun
+    if (platform === 'bolide') return '#9933ff';   // purple for bolide
+
     // Check for clank.fun deployment (fid will be 0)
     if (fid === 0) {
         return '#ff9900'; // orange for clank.fun deployments
