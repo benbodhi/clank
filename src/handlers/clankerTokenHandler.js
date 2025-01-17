@@ -2,6 +2,7 @@ const { formatUnits } = require('ethers');
 const { settings } = require('../config');
 const { sendClankerMessage } = require('../utils/discordMessenger');
 const { handleError } = require('./errorHandler');
+const { getWarpcastUserData } = require('../services/warpcastResolver');
 const addresses = require('../contracts/addresses.json');
 const logger = require('../utils/logger');
 const { ethers } = require('ethers');
