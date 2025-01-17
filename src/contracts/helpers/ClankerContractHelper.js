@@ -17,7 +17,7 @@ class ClankerContractHelper {
 
         this.clankerPresale = new ethers.Contract(
             addresses.clanker.presale,
-            require('../abis/clanker/ClankerPresale.json'),
+            require('../abis/clanker/ClankerPreSale.json'),
             provider
         );
         logger.detail('Initialized Presale', addresses.clanker.presale);
