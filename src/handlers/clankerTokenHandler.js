@@ -66,6 +66,16 @@ async function handleClankerToken({
             return;
         }
 
+        // Skip notifications for specific FIDs
+        if (settings.skippedFids.includes(Number(fid))) {
+            logger.section('⚠️ Skipping Discord Notification');
+            logger.detail('Reason', 'Blocked FID');
+            logger.detail('FID', fid);
+            logger.detail('Username', warpcastData?.username);
+            logger.sectionEnd();
+            return;
+        }
+
         // Get pool address from transaction logs
         const poolResolutionStart = Date.now();
         const poolAddress = await getPoolAddress(event.transactionHash, provider);

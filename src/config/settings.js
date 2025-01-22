@@ -21,6 +21,9 @@ const settings = {
         over200000: 200000
     },
 
+    /** FIDs to skip notifications for */
+    skippedFids: [880, 6622, 306175],
+
     features: {
         displayImages: true  // Toggle this to enable/disable images
     }
