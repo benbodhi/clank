@@ -60,7 +60,19 @@ A Discord bot that monitors new token deployments on Base through the Clanker Fa
 - npm or yarn
 - Discord bot token
 - Discord channel ID
-- Alchemy API key for Base network
+- Alchemy API key for Base network with:
+  - Webhooks enabled
+  - WebSockets enabled
+  - Debug API enabled
+
+## Alchemy Setup
+
+1. Create a new app for Base network in your Alchemy dashboard
+2. Enable required features:
+   - **WebSockets** - Required for real-time event monitoring
+   - **Webhooks** - For real-time notifications
+   - **Debug API** - For transaction and event tracing
+3. Copy your API key to use in the environment variables
 
 ## Project Structure
 
@@ -124,26 +136,29 @@ The bot's configuration is split into multiple files:
 
 ## Environment Variables
 
-The bot requires several environment variables to be set:
-
 ### Required Core Variables
 - `ALCHEMY_API_KEY`: Alchemy API key for Base network
 - `DISCORD_TOKEN`: Your Discord bot token
 - `DISCORD_CLANKER_CHANNEL_ID`: Channel ID for Clanker notifications
-- `CLANKFUN_DEPLOYER_ROLE`: Role ID for clank.fun deployments 🤖
 
-### FID Role Variables
-- `FID_BELOW_1000_ROLE`: Role ID for FIDs under 1,000
-- `FID_BELOW_5000_ROLE`: Role ID for FIDs under 5,000
-- `FID_BELOW_10000_ROLE`: Role ID for FIDs under 10,000
+### Role System Variables
+The bot uses a tiered notification system with cascading roles:
 
-### Follower Role Variables
-- `FOLLOWERS_OVER_5000_ROLE`: Role ID for accounts with 5,000+ followers
-- `FOLLOWERS_OVER_10000_ROLE`: Role ID for accounts with 10,000+ followers
-- `FOLLOWERS_OVER_20000_ROLE`: Role ID for accounts with 20,000+ followers
-- `FOLLOWERS_OVER_50000_ROLE`: Role ID for accounts with 50,000+ followers
-- `FOLLOWERS_OVER_100000_ROLE`: Role ID for accounts with 100,000+ followers
-- `FOLLOWERS_OVER_200000_ROLE`: Role ID for accounts with 200,000+ followers
+**FID Roles** (cascade downward)
+- `FID_BELOW_1000_ROLE` 🔥
+- `FID_BELOW_5000_ROLE` 👀
+- `FID_BELOW_10000_ROLE` 📊
+
+**Follower Roles** (cascade upward)
+- `FOLLOWERS_OVER_5000_ROLE` 📈
+- `FOLLOWERS_OVER_10000_ROLE` ✨
+- `FOLLOWERS_OVER_20000_ROLE` ⭐
+- `FOLLOWERS_OVER_50000_ROLE` 💫
+- `FOLLOWERS_OVER_100000_ROLE` 🚀
+- `FOLLOWERS_OVER_200000_ROLE` 🌟
+
+**Platform Role**
+- `CLANKFUN_DEPLOYER_ROLE` 🤖
 
 Copy `.env.example` to `.env` and fill in your values.
 
@@ -203,28 +218,14 @@ The bot can be deployed on platforms like Railway:
    - Copy this token - you'll need it for your `.env` file
    - Keep this token secret and never share it
 
-3. **Create Required Roles**
-   Create the following roles in your Discord server:
-   
-   FID-based roles:
-   - Role for FIDs below 1,000
-   - Role for FIDs below 5,000
-   - Role for FIDs below 10,000
-   
-   Follower-based roles:
-   - Role for 5,000+ followers
-   - Role for 10,000+ followers
-   - Role for 20,000+ followers
-   - Role for 50,000+ followers
-   - Role for 100,000+ followers
-   - Role for 200,000+ followers
+3. **Role Setup**
+   - Enable Developer Mode in Discord (User Settings > App Settings > Advanced)
+   - Create the roles listed in the Environment Variables section above
+   - Right-click each role and "Copy ID" to get the role IDs
+   - Add these IDs to your `.env` file
+   - Ensure the bot's role is higher than all notification roles
 
-4. **Get Role IDs**
-   - Enable Developer Mode in Discord (User Settings > App Settings > Advanced > Developer Mode)
-   - Right-click each role and click "Copy ID"
-   - Add these IDs to your `.env` file with their corresponding variable names
-
-5. **Invite Bot to Server**
+4. **Invite Bot to Server**
    - Go to OAuth2 > URL Generator
    - Select the following scopes:
      - `bot`
@@ -238,21 +239,27 @@ The bot can be deployed on platforms like Railway:
    - Copy the generated URL and open it in a browser
    - Select your server and authorize the bot
 
-6. **Configure Channel**
+5. **Configure Channel**
    - Create or select a channel for notifications
    - Right-click the channel and copy the ID
    - Add this ID to your environment variables
 
-7. **Bot Permissions**
+6. **Bot Permissions**
    Ensure the bot has the following permissions in the notification channel:
    - View Channel
    - Send Messages
    - Embed Links
    - Mention Roles
 
-8. **Role Hierarchy**
+7. **Role Hierarchy**
    - Ensure the bot's role is higher than all notification roles in the server settings
    - This allows the bot to mention these roles in messages
+
+### Role Behavior
+
+- **FID Roles**: Only triggers the highest applicable role (e.g., FID 800 only triggers Below 1,000 role 🔥)
+- **Follower Roles**: Only triggers the highest applicable role (e.g., 120k followers only triggers Over 100,000 role 🚀)
+- **Platform Role**: Independent of other thresholds, only triggers for clank.fun deployments with orange embed color
 
 ## MEE6 Role Self-Service Setup
 
