@@ -26,6 +26,7 @@ function getDeploymentPlatform(castHash) {
     const hash = castHash.toLowerCase();
     if (hash.includes('clank.fun')) return 'clankfun';
     if (hash.includes('bolide')) return 'bolide';
+    if (hash.includes('bankr')) return 'bankr';
     return 'standard';
 }
 
@@ -103,6 +104,9 @@ function createClankerMessageContent(tokenData, warpcastData) {
     } else if (platform === 'bolide') {
         messages.push(`**<@&${process.env.BOLIDE_DEPLOYER_ROLE}> 🟣**`);
         messages.push(`**Bolide Deployment**`);
+    } else if (platform === 'bankr') {
+        messages.push(`**<@&${process.env.BANKR_DEPLOYER_ROLE}> 💰**`);
+        messages.push(`**Bankr Deployment**`);
     } else {
         // FID-based notifications
         if (fid < settings.fidThresholds.below1000) {
@@ -165,11 +169,11 @@ async function sendClankerMessage(tokenData, event, discord, timings = {}) {
         // Use the warpcastData that was passed in with tokenData
         const warpcastData = tokenData.warpcastData;
 
-        // Check if it's a clank.fun deployment
-        const isClankFun = tokenData.castHash?.toLowerCase().includes('clank.fun');
+        // Get the platform type
+        const platform = getDeploymentPlatform(tokenData.castHash);
 
         const embed = new EmbedBuilder()
-            .setColor(determineEmbedColor(isClankFun ? 0 : tokenData.fid, warpcastData?.followerCount))
+            .setColor(determineEmbedColor(platform === 'standard' ? tokenData.fid : 0, warpcastData?.followerCount, platform))
             .setTitle('🚀 New Clanker Token Deployed')
             .addFields(createClankerEmbedFields(tokenData, deployerField, uniswapTradeLink, photonLink, warpcastData))
             .setTimestamp();
@@ -192,6 +196,7 @@ function determineEmbedColor(fid, followers, platform) {
     // Platform-specific colors
     if (platform === 'clankfun') return '#ff9900'; // orange for clank.fun
     if (platform === 'bolide') return '#9933ff';   // purple for bolide
+    if (platform === 'bankr') return '#00cc66';    // green for bankr
 
     // Check for clank.fun deployment (fid will be 0)
     if (fid === 0) {
@@ -323,8 +328,14 @@ function createPresaleMessageContent(presaleData, warpcastData) {
     const mentions = [];
     
     // Add role mentions based on FID and follower count
-    if (presaleData.castHash?.toLowerCase().includes('clank.fun')) {
+    const platform = getDeploymentPlatform(presaleData.castHash);
+    
+    if (platform === 'clankfun') {
         mentions.push(`<@&${process.env.CLANKFUN_DEPLOYER_ROLE}>`);
+    } else if (platform === 'bolide') {
+        mentions.push(`<@&${process.env.BOLIDE_DEPLOYER_ROLE}>`);
+    } else if (platform === 'bankr') {
+        mentions.push(`<@&${process.env.BANKR_DEPLOYER_ROLE}>`);
     } else {
         // Add FID-based role mentions
         const fid = parseInt(presaleData.fid);
