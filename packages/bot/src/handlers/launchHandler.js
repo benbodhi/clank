@@ -1,5 +1,6 @@
 const { settings } = require('../config');
 const { decodeLaunchLog, fetchFeeRecipients, fetchV5Details, parseContext } = require('../contracts/launchDecoder');
+const { networkAsChain } = require('../services/bankrFeed');
 const { getBasename } = require('../services/basenames');
 const { LookupError, getUserByAddress, getUserByFid } = require('../services/clankerApi');
 const { noStore } = require('../services/launchStore');
@@ -91,8 +92,8 @@ async function resolveIdentity({ claim, deployer, deployerIsSigner, wallets }, s
 function skipReason({ identity, platform, deployerName }) {
     const { notify, skippedFids } = settings;
 
-    if (platform?.trusted) return null;
     if (identity.fid && skippedFids.includes(identity.fid)) return 'skipped FID';
+    if (platform?.trusted) return null;
 
     switch (identity.kind) {
         case 'farcaster':
@@ -111,7 +112,7 @@ function skipReason({ identity, platform, deployerName }) {
 }
 
 /** Flattens a resolved launch into the row the webapp reads. All text is cleaned. */
-function toRecord({ chain, launch, context, identity, platform, deployerName, vetted, feeRecipients, reason }) {
+function toRecord({ chain, launch, context, identity, platform, deployerName, vetted, feeRecipients, reason, source = 'clanker' }) {
     const actor = vetted && launch.creator ? launch.creator : launch.deployer;
     const profile = identity.profile;
     return {
@@ -150,7 +151,8 @@ function toRecord({ chain, launch, context, identity, platform, deployerName, ve
         linked_role: identity.role,
         linked_wallet: identity.wallet,
         conflicting_fid: identity.conflictingClaim,
-        skip_reason: reason
+        skip_reason: reason,
+        source
     };
 }
 
@@ -163,6 +165,8 @@ async function loadFeeRecipients(launch, services) {
         return [];
     }
 }
+
+const secondsSince = (date) => Math.round((Date.now() - date.getTime()) / 1000);
 
 /** Answers "unknown" instead of failing, so a long API outage can't block alerts. */
 function tolerant(lookup) {
@@ -247,7 +251,7 @@ function createLaunchHandler({ chain, provider, store = noStore, send, stats, we
         await send(buildMessage({ chain, launch, identity, platform, deployerName, vetted, feeRecipients, webUrl }));
         await store.markPosted(record);
         stats.posted++;
-        logger.info(`Posted ${label}`);
+        logger.info(`Posted ${label}, ${secondsSince(launch.launchedAt)}s after launch`);
     };
 }
 
@@ -266,4 +270,91 @@ async function handleWithRetries(handle, rawLog, stats, { delaysMs } = {}) {
     }
 }
 
-module.exports = { createLaunchHandler, handleWithRetries, resolveIdentity, skipReason, readClaim, toRecord };
+/**
+ * Handles a launch from Bankr's feed. The feed itself shows it's a Bankr launch, so
+ * the platform label is genuine. The X account is the one Bankr links to the deploying
+ * wallet. A fee recipient is shown but proves nothing: deployers can name anyone.
+ */
+function createBankrHandler({ store = noStore, send, stats, webUrl = null, services: overrides }) {
+    const services = { getUserByAddress, ...overrides };
+    const bankr = settings.platforms.find((platform) => platform.key === 'bankr');
+    const platform = { ...bankr, trusted: true };
+    const messages = new Map(); // token -> its Discord message, for adding details later
+
+    const prepare = async (parsed, currentPlatform) => {
+        const chain = networkAsChain(parsed.network);
+        const launch = {
+            version: parsed.launchType,
+            tokenAddress: parsed.tokenAddress,
+            transactionHash: parsed.transactionHash,
+            blockNumber: null,
+            launchedAt: parsed.launchedAt,
+            deployer: parsed.deployer,
+            deployerIsSigner: true,
+            deployerNote: currentPlatform.trusted ? 'Bankr wallet' : 'Launching wallet',
+            creator: null,
+            poolId: parsed.poolId,
+            name: parsed.name,
+            symbol: parsed.symbol,
+            image: parsed.image,
+            supply: null
+        };
+
+        const user = await tolerant(services.getUserByAddress)(parsed.deployer);
+        const identity = user
+            ? verifiedFarcaster(user, user.fid, 'wallet', null)
+            : parsed.xHandle
+                ? { kind: 'x', verified: true, proof: 'bankr', handle: parsed.xHandle, postUrl: parsed.xPostUrl }
+                : { kind: 'none', verified: false };
+
+        const feeRecipients = parsed.feeRecipient ? [{ ...parsed.feeRecipient, bps: null }] : [];
+        const reason = skipReason({ identity, platform: currentPlatform, deployerName: null });
+        const record = toRecord({
+            chain, launch, identity, platform: currentPlatform, deployerName: null, vetted: false, feeRecipients, reason,
+            context: { interface: 'Bankr' },
+            source: 'bankr'
+        });
+        const render = () => buildMessage({ chain, launch, identity, platform: currentPlatform, feeRecipients, webUrl });
+        const label = `${chain.name} Bankr ${cleanText(launch.name, 40)} (${cleanText(launch.symbol, 20)}) ${launch.tokenAddress}`;
+        return { launch, record, reason, render, label };
+    };
+
+    const update = async (parsed, currentPlatform) => {
+        const { record, render, label } = await prepare(parsed, currentPlatform);
+        await store.saveLaunch(record);
+        const message = messages.get(parsed.tokenAddress);
+        messages.delete(parsed.tokenAddress);
+        // Failing to add details is harmless: the alert itself has already gone out.
+        await message?.edit(render()).catch((error) => logger.warn(`Could not update alert for ${label}: ${error.message}`));
+    };
+
+    const handleBankrLaunch = async (parsed, { silent = false } = {}) => {
+        const { launch, record, reason, render, label } = await prepare(parsed, platform);
+        const { alreadyPosted } = await store.saveLaunch(record);
+
+        if (reason) {
+            stats.skipped[reason] = (stats.skipped[reason] ?? 0) + 1;
+            logger.info(`Skipped ${label}: ${reason}`);
+            return;
+        }
+        if (silent || alreadyPosted || !send) {
+            logger.debug(`Recorded ${label}`);
+            return;
+        }
+
+        const message = await send(render());
+        if (message?.edit) {
+            if (messages.size >= 500) messages.delete(messages.keys().next().value);
+            messages.set(launch.tokenAddress, message);
+        }
+        await store.markPosted(record);
+        stats.posted++;
+        logger.info(`Posted ${label}, ${secondsSince(launch.launchedAt)}s after launch`);
+    };
+
+    handleBankrLaunch.enrich = (parsed) => update(parsed, platform);
+    handleBankrLaunch.markUnconfirmed = (parsed) => update(parsed, { ...platform, trusted: false });
+    return handleBankrLaunch;
+}
+
+module.exports = { createBankrHandler, createLaunchHandler, handleWithRetries, resolveIdentity, skipReason, readClaim, toRecord };

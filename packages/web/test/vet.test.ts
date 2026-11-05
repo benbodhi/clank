@@ -8,6 +8,7 @@ import type { Launch } from '../src/lib/types.ts';
 const ADDRESS = '0x67661325031f98417e8101D1d5B34A48A5fdCCCC';
 
 const base: Launch = {
+    source: 'clanker',
     chainId: 8453, chainKey: 'base', chainName: 'Base', explorerName: 'Basescan', explorerUrl: 'https://basescan.org',
     tokenAddress: ADDRESS, version: 'v4', txHash: '0x1', launchedAt: '2026-11-05T00:00:00.000Z',
     name: 'Token', symbol: 'TKN', imageUrl: null, poolId: null, supply: null, buyTaxPercent: null, sellTaxPercent: null,
@@ -54,6 +55,17 @@ test('Buy links stay on Base-only venues only for Base', () => {
     assert.deepEqual(tradeLinks(elysium).map((link) => link.label), ['Clanker']);
     assert.equal(researchLinks(elysium)[0]?.href, `https://explorer.example/token/${ADDRESS}`);
     assert.equal(tokenPath(elysium), `/token/elysium/${ADDRESS}`);
+});
+
+test('Bankr launches lead with Bankr, and never link to Clanker', () => {
+    const bankr = { ...base, source: 'bankr' as const };
+    assert.deepEqual(tradeLinks(bankr).map((link) => link.label), ['Bankr', 'Uniswap', 'Matcha']);
+    const robinhood = { ...bankr, chainKey: 'robinhood', explorerName: 'Explorer', explorerUrl: 'https://robin.etherscan.io' };
+    assert.deepEqual(tradeLinks(robinhood).map((link) => link.label), ['Bankr']);
+});
+
+test('a Bankr-linked handle is informational, not a pass', () => {
+    assert.equal(vetSignals({ ...base, source: 'bankr', identityKind: 'x', identityVerified: true, identityProof: 'bankr', xHandle: 'a' })[0]?.level, 'info');
 });
 
 test('input validation rejects malformed values', () => {

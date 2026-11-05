@@ -108,6 +108,7 @@ function identityFields({ identity }) {
             }];
         case 'x': {
             const value = xLink(identity.handle, identity.postUrl);
+            if (identity.proof === 'bankr') return [{ name: 'X (linked by Bankr)', value }];
             if (identity.verified) return [{ name: 'X', value }];
             return [{
                 name: '⚠️ Unverified X claim',
@@ -139,7 +140,8 @@ function addressField(chain, name, address, note) {
     return { name, value: [note, address, links].filter(Boolean).join('\n') };
 }
 
-function deployerField(chain, { deployer, deployerIsSigner }, { vetted, deployerName }) {
+function deployerField(chain, { deployer, deployerIsSigner, deployerNote }, { vetted, deployerName }) {
+    if (deployerNote) return addressField(chain, 'Deployer', deployer, deployerNote);
     if (vetted) return addressField(chain, 'Deployer', deployer, 'Clanker-vetted wallet, deploying for the creator');
     if (!deployerIsSigner) return addressField(chain, 'Sent By', deployer, 'Launched through another contract, so this proves nothing');
     return addressField(chain, 'Deployer', deployer, deployerName ? displayText(deployerName, 80) : null);
@@ -147,11 +149,14 @@ function deployerField(chain, { deployer, deployerIsSigner }, { vetted, deployer
 
 function feeField(chain, recipients) {
     if (!recipients.length) return [];
-    const shown = recipients.slice(0, MAX_FEE_RECIPIENTS).map(({ wallet, bps }) =>
-        `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}% [${wallet}](${chain.explorer.url}/address/${wallet})`);
+    const shown = recipients.slice(0, MAX_FEE_RECIPIENTS).map(({ wallet, bps, xHandle }) => {
+        const share = Number.isFinite(bps) ? `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}% ` : '';
+        const handle = xHandle ? ` (named as ${displayText(`@${xHandle}`, 20)})` : '';
+        return `${share}[${wallet}](${chain.explorer.url}/address/${wallet})${handle}`;
+    });
     const hidden = recipients.length - shown.length;
     if (hidden > 0) shown.push(`and ${hidden} more`);
-    return [{ name: 'Fee Recipients', value: shown.join('\n') }];
+    return [{ name: 'Fee Recipients', value: `${shown.join('\n')}\nChosen by the deployer, so not proof of involvement` }];
 }
 
 /** Builds a complete Discord message for a launch. Pure, so it's testable offline. */
@@ -186,7 +191,7 @@ function buildMessage({ chain, launch, identity, platform, deployerName = null, 
         ...(Number.isFinite(launch.buyTaxPercent)
             ? [{ name: 'Tax', value: `${launch.buyTaxPercent}% buy / ${launch.sellTaxPercent}% sell` }]
             : []),
-        { name: 'Total Supply', value: launch.supply }
+        ...(launch.supply ? [{ name: 'Total Supply', value: launch.supply }] : [])
     );
 
     const embed = new EmbedBuilder()

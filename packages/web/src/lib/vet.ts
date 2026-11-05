@@ -33,6 +33,9 @@ function identitySignal(launch: Launch): VetSignal {
             ? { level: 'good', label: 'Deployer proven', detail: "The wallet that signed the deployment is verified on this Farcaster account." }
             : { level: 'good', label: 'Vetted by Clanker', detail: 'A wallet Clanker vets deployed this on behalf of the account shown.' };
     }
+    if (verified && kind === 'x' && proof === 'bankr') {
+        return { level: 'info', label: 'Linked by Bankr', detail: "Bankr links the deploying wallet to this X account. That shows who launched it, but a handle can still imitate someone else's." };
+    }
     if (verified && kind === 'x') {
         return { level: 'good', label: 'Vetted by Clanker', detail: 'A wallet Clanker vets deployed this on behalf of the X account shown.' };
     }

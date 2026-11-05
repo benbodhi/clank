@@ -22,6 +22,18 @@ function createBase(alchemyApiKey) {
         // Base produces a block exactly every 2 seconds, so a block's time needs no RPC call.
         blockClock: { genesisTimestamp: 1686789347, secondsPerBlock: 2 },
         basenameResolver: '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD',
+        // Doppler's Airlock, which Bankr launches through on Base.
+        dopplerAirlock: '0x660eAaEdEBc968f8f3694354FA8EC0b4c5Ba8D12',
+        // What marks a launch as Bankr's: its protocol fee going to these wallets, in this
+        // ratio. Faking that means giving Bankr the fees. Observed, not documented by Bankr,
+        // so the feed flags any launch this misses (see BankrFeed.runPoll).
+        bankrSignature: {
+            hook: '0x9982538f41f2ae29ddb9d3d9307010052984FDBb',
+            beneficiaries: {
+                '0x042455f9990098e11592be1fbd72e6dc68419b13': 333333333333333333n,
+                '0x5f8da8f88ec81e27f2e22fcb9ca5d926c595e508': 666666666666666667n
+            }
+        },
         watcher: BASE_WATCHER,
         explorer: { name: 'Basescan', url: 'https://basescan.org' },
         tradeLinks: (token) => [

@@ -40,7 +40,7 @@ export function LaunchCard({ launch, market, isNew }: { launch: Launch; market?:
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                         <span className="truncate font-medium text-muted-foreground">${launch.symbol}</span>
-                        <span className="shrink-0 rounded-sm bg-muted px-1 py-px text-muted-foreground">{launch.version}</span>
+                        <span className="shrink-0 rounded-sm bg-muted px-1 py-px text-muted-foreground">{launch.source === 'bankr' ? 'Bankr' : launch.version}</span>
                         {launch.chainKey !== 'base' && (
                             <span className="shrink-0 rounded-sm bg-muted px-1 py-px text-muted-foreground">{launch.chainName}</span>
                         )}

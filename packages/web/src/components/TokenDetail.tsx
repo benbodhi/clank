@@ -138,11 +138,13 @@ export function TokenDetail({ launch }: { launch: Launch }) {
                     <WalletRow
                         launch={launch}
                         label={launch.deployerIsSigner ? 'Deployer' : 'Sent by'}
-                        note={!launch.deployerIsSigner
-                            ? 'Launched through another contract, so this proves nothing about who is behind it'
-                            : launch.deployerVetted
-                                ? 'A Clanker-vetted wallet, deploying for the creator'
-                                : launch.deployerName ?? 'Made the deployment, so this is proof of who launched it'}
+                        note={launch.source === 'bankr'
+                            ? 'A Bankr wallet, as reported by Bankr'
+                            : !launch.deployerIsSigner
+                                ? 'Launched through another contract, so this proves nothing about who is behind it'
+                                : launch.deployerVetted
+                                    ? 'A Clanker-vetted wallet, deploying for the creator'
+                                    : launch.deployerName ?? 'Made the deployment, so this is proof of who launched it'}
                         address={launch.deployer}
                     />
                     {launch.creator && launch.creator.toLowerCase() !== launch.deployer.toLowerCase() && (
@@ -153,8 +155,14 @@ export function TokenDetail({ launch }: { launch: Launch }) {
                             address={launch.creator}
                         />
                     )}
-                    {launch.feeRecipients.map(({ wallet, bps }) => (
-                        <WalletRow key={wallet} launch={launch} label={`Fee recipient · ${sharePercent(bps)}`} address={wallet} />
+                    {launch.feeRecipients.map(({ wallet, bps, xHandle }) => (
+                        <WalletRow
+                            key={wallet}
+                            launch={launch}
+                            label={bps === null ? 'Fee recipient' : `Fee recipient · ${sharePercent(bps)}`}
+                            note={xHandle ? `Named as @${xHandle}. Chosen by the deployer, so not proof of involvement` : 'Chosen by the deployer, so not proof of involvement'}
+                            address={wallet}
+                        />
                     ))}
                 </div>
             </Section>

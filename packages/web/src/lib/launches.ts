@@ -21,6 +21,7 @@ function toLaunch(row: any): Launch | null {
 
     const toNumber = (value: unknown) => (value === null || value === undefined ? null : Number(value));
     return {
+        source: row.source === 'bankr' ? 'bankr' : 'clanker',
         chainId: chain.id,
         chainKey: chain.key,
         chainName: chain.name,
@@ -90,7 +91,8 @@ export async function listLaunches({ filter, query, cursor, limit }: ListOptions
     const where: string[] = [];
 
     if (filter === 'proven') where.push('l.identity_verified');
-    if (filter === 'identified') where.push(`l.identity_kind <> 'none'`);
+    if (filter === 'bankr') where.push(`l.source = 'bankr'`);
+    if (filter === 'identified') where.push(`(l.identity_kind <> 'none' OR l.source = 'bankr')`);
 
     const position = decodeCursor(cursor ?? null);
     if (position) {

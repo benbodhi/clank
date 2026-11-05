@@ -1,4 +1,4 @@
-const { Contract, Interface, formatUnits, getAddress } = require('ethers');
+const { Contract, Interface, formatUnits, getAddress, id } = require('ethers');
 
 // Only the fragments the bot uses. The test suite pins the event hashes against
 // the values Clanker publishes at /api/metadata/factories.
@@ -29,6 +29,9 @@ const hookV5Abi = [
 const V4_TOPIC = factoryV4.getEvent('TokenCreated').topicHash;
 const V5_TOPIC = factoryV5.getEvent('Launched').topicHash;
 
+/** Doppler's Airlock: Create(address asset, address indexed numeraire, address initializer, address poolOrHook). */
+const DOPPLER_CREATE_TOPIC = id('Create(address,address,address,address)');
+
 /** v4's TOKEN_SUPPLY is a contract constant, so it isn't in the event. */
 const V4_SUPPLY = 100_000_000_000n * 10n ** 18n;
 
@@ -45,9 +48,10 @@ function blockTime(chain, blockNumber) {
 /** The address and topic filter for a chain's factories. */
 function launchFilter(chain) {
     const { v4, v5 } = chain.factories;
+    const airlock = chain.dopplerAirlock;
     return {
-        addresses: [v4, v5].filter(Boolean),
-        topics: [v4 && V4_TOPIC, v5 && V5_TOPIC].filter(Boolean)
+        addresses: [v4, v5, airlock].filter(Boolean),
+        topics: [v4 && V4_TOPIC, v5 && V5_TOPIC, airlock && DOPPLER_CREATE_TOPIC].filter(Boolean)
     };
 }
 
@@ -114,6 +118,74 @@ function decodeLaunchLog(rawLog, chain) {
     if (topic === V4_TOPIC && sameAddress(rawLog.address, chain.factories.v4)) return decodeV4(rawLog, chain);
     if (topic === V5_TOPIC && sameAddress(rawLog.address, chain.factories.v5)) return decodeV5(rawLog, chain);
     return null;
+}
+
+/**
+ * The token in a Doppler launch, or null for any other log. This only says a token
+ * launched through Doppler: other launchpads use it too, so the caller still has to
+ * ask Bankr whether this one is theirs.
+ */
+function decodeDopplerCreate(rawLog, chain) {
+    if (rawLog.removed || rawLog.topics?.[0] !== DOPPLER_CREATE_TOPIC) return null;
+    if (!sameAddress(rawLog.address, chain.dopplerAirlock)) return null;
+    if (typeof rawLog.data !== 'string' || rawLog.data.length < 66) return null;
+    try {
+        return getAddress(`0x${rawLog.data.slice(26, 66)}`);
+    } catch {
+        return null;
+    }
+}
+
+const dopplerHook = new Interface([
+    'event FeeBeneficiariesSet(bytes32 indexed poolId, tuple(address beneficiary, uint96 shares)[] beneficiaries)'
+]);
+const USER_OPERATION_EVENT = id('UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)');
+const tokenMetadataAbi = ['function name() view returns (string)', 'function symbol() view returns (string)'];
+
+function matchesBankrFees(rawLog, signature) {
+    if (!sameAddress(rawLog.address, signature.hook)) return null;
+    let parsed;
+    try {
+        parsed = dopplerHook.parseLog({ topics: rawLog.topics, data: rawLog.data });
+    } catch {
+        return null;
+    }
+    const expected = Object.entries(signature.beneficiaries);
+    const actual = parsed?.args.beneficiaries;
+    if (!actual || actual.length !== expected.length) return null;
+    const matches = expected.every(([wallet, shares]) => actual.some(
+        (entry) => entry.beneficiary.toLowerCase() === wallet && entry.shares === shares
+    ));
+    return matches ? parsed.args.poolId : null;
+}
+
+/**
+ * Recognises a Bankr launch from its transaction alone, so an alert needn't wait for
+ * Bankr's API. Returns null for any other Doppler launch. Bankr launches through account
+ * abstraction, where tx.from is a bundler, so the deployer is the operation's sender.
+ */
+function identifyBankrLaunch(receipt, createLog, chain) {
+    const signature = chain.bankrSignature;
+    if (!signature || receipt.status !== '0x1') return null;
+
+    let poolId = null;
+    for (const rawLog of receipt.logs) {
+        poolId = matchesBankrFees(rawLog, signature);
+        if (poolId) break;
+    }
+    if (!poolId) return null;
+
+    const createIndex = receipt.logs.findIndex((rawLog) => rawLog.logIndex === createLog.logIndex);
+    const operation = receipt.logs.slice(createIndex + 1).find((rawLog) => rawLog.topics[0] === USER_OPERATION_EVENT);
+    const sender = operation ? `0x${operation.topics[2].slice(26)}` : receipt.from;
+    return { poolId, deployer: getAddress(sender) };
+}
+
+/** A token's name and symbol, read from the chain. */
+async function readTokenMetadata(tokenAddress, provider) {
+    const token = new Contract(tokenAddress, tokenMetadataAbi, provider);
+    const [name, symbol] = await Promise.all([token.name(), token.symbol()]);
+    return { name, symbol };
 }
 
 /** The launch's parameters from its calldata, or null if it isn't a known launch call. */
@@ -222,7 +294,11 @@ function parseContext(rawContext) {
 module.exports = {
     V4_TOPIC,
     V5_TOPIC,
+    DOPPLER_CREATE_TOPIC,
     blockTime,
+    decodeDopplerCreate,
+    identifyBankrLaunch,
+    readTokenMetadata,
     launchFilter,
     decodeLaunchLog,
     parseLaunchParams,

@@ -14,7 +14,7 @@ const COLUMNS = [
     'interface', 'platform', 'platform_trusted',
     'identity_kind', 'identity_verified', 'identity_proof', 'fid', 'farcaster_username',
     'follower_count', 'x_handle', 'x_post_url', 'cast_hash', 'linked_role', 'linked_wallet',
-    'conflicting_fid', 'skip_reason'
+    'conflicting_fid', 'skip_reason', 'source'
 ];
 
 const UPSERT_SQL = `

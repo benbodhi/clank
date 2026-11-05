@@ -25,9 +25,9 @@ const settings = {
     /**
      * Deployment platforms, matched case-insensitively on the token's `interface`.
      *
-     * The interface is self-reported, so anyone can claim to be any platform. A
-     * platform role is only pinged when the deployer is listed in `deployers`;
-     * otherwise the token is labelled as self-reported and nobody is pinged.
+     * The interface on a Clanker token is self-reported, so anyone can claim to be any
+     * platform. There, a platform role is only pinged when the deployer is listed in
+     * `deployers`. Launches from Bankr's own feed are genuine, so they always ping it.
      */
     platforms: [
         { key: 'bankr', label: 'Bankr', interfaces: ['bankr'], role: 'BANKR_DEPLOYER_ROLE', emoji: '💰', color: '#00cc66', deployers: [] }
@@ -83,6 +83,14 @@ const settings = {
 
     features: {
         displayImages: true
+    },
+
+    /** Bankr's feed. Doppler launches on watched chains arrive sooner: this is the safety net. */
+    bankr: {
+        enabled: true,
+        pollIntervalMs: 30_000,
+        /** Launches older than this are recorded without an alert, for example after downtime. */
+        maxAlertAgeMs: 30 * 60_000
     },
 
     /** Defaults for each chain's watcher. Block ranges are set per chain in chains.js. */

@@ -2,10 +2,14 @@ export type IdentityKind = 'farcaster' | 'x' | 'linked' | 'none';
 
 export interface FeeRecipient {
     wallet: string;
-    bps: number;
+    /** Null when the source doesn't report a share. */
+    bps: number | null;
+    xHandle?: string | null;
 }
 
 export interface Launch {
+    /** Where the launch was seen: Clanker's factories, or Bankr's feed. */
+    source: 'clanker' | 'bankr';
     chainId: number;
     chainKey: string;
     chainName: string;
@@ -48,7 +52,7 @@ export interface Launch {
     actorLaunches24h: number;
 }
 
-export type FeedFilter = 'identified' | 'proven' | 'all';
+export type FeedFilter = 'identified' | 'proven' | 'bankr' | 'all';
 
 export interface LaunchPage {
     launches: Launch[];

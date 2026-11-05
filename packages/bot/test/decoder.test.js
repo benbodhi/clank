@@ -7,6 +7,8 @@ const {
     V4_TOPIC, V5_TOPIC, blockTime, decodeLaunchLog, fetchV5Details, launchFilter, parseContext, parseLaunchParams
 } = require('../src/contracts/launchDecoder');
 const { readClaim } = require('../src/handlers/launchHandler');
+const doppler = require('./fixtures/doppler-create.json');
+const { DOPPLER_CREATE_TOPIC, decodeDopplerCreate } = require('../src/contracts/launchDecoder');
 
 const base = createBase('test-key');
 const ADDRESS = '0x1111111111111111111111111111111111111111';
@@ -78,6 +80,18 @@ test('a v5 launch through another contract never counts as signed by its sender'
     };
     await assert.rejects(fetchV5Details(launch, provider, base));
     assert.equal(parseLaunchParams('0xdeadbeef'), null);
+});
+
+test('finds the token in a real Doppler launch, and only from the Airlock', () => {
+    assert.equal(doppler.topics[0], DOPPLER_CREATE_TOPIC);
+    assert.equal(decodeDopplerCreate(doppler, base).toLowerCase(), doppler.tokenAddress.toLowerCase());
+    assert.equal(decodeDopplerCreate({ ...doppler, address: ADDRESS }, base), null, 'a fake Airlock');
+    assert.equal(decodeDopplerCreate({ ...doppler, removed: true }, base), null);
+    assert.equal(decodeDopplerCreate(logs.v4X, base), null);
+    assert.equal(decodeDopplerCreate(doppler, createElysium({
+        ELYSIUM_CHAIN_ID: '1', ELYSIUM_RPC_URL: 'https://r.example', ELYSIUM_EXPLORER_URL: 'https://e.example', ELYSIUM_FACTORY_V4: ADDRESS
+    })), null, 'a chain with no Airlock');
+    assert.ok(launchFilter(base).topics.includes(DOPPLER_CREATE_TOPIC));
 });
 
 test('parseContext never throws on hostile input', () => {

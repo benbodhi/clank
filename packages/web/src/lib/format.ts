@@ -25,6 +25,7 @@ export function percent(value: number | null): string {
     return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
-export function sharePercent(bps: number): string {
+export function sharePercent(bps: number | null): string {
+    if (bps === null) return '';
     return `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
 }

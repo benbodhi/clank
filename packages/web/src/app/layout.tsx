@@ -4,11 +4,11 @@ import './globals.css';
 
 export const metadata: Metadata = {
     title: 'Clank',
-    description: 'Clanker token launches on Base as they happen, with who is behind them and quick ways to vet and trade.',
+    description: 'Clanker and Bankr token launches as they happen, with who is behind them and quick ways to vet and trade.',
     referrer: 'no-referrer',
     openGraph: {
         title: 'Clank',
-        description: 'Clanker token launches on Base as they happen.'
+        description: 'Clanker and Bankr token launches as they happen.'
     }
 };
 

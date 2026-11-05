@@ -7,7 +7,7 @@ export function isAddress(value: string | null | undefined): boolean {
 }
 
 export function parseFilter(value: string | null): FeedFilter {
-    return value === 'proven' || value === 'all' ? value : 'identified';
+    return value === 'proven' || value === 'bankr' || value === 'all' ? value : 'identified';
 }
 
 export function parseLimit(value: string | null, fallback = 30, max = 60): number {

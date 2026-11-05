@@ -1,20 +1,23 @@
 import type { Launch } from './types.ts';
 
 type Link = { label: string; href: string };
-type ChainRef = Pick<Launch, 'chainKey' | 'tokenAddress' | 'poolId' | 'explorerUrl' | 'explorerName'>;
+type ChainRef = Pick<Launch, 'source' | 'chainKey' | 'tokenAddress' | 'poolId' | 'explorerUrl' | 'explorerName'>;
 
 export const tokenPath = ({ chainKey, tokenAddress }: Pick<Launch, 'chainKey' | 'tokenAddress'>) =>
     `/token/${chainKey}/${tokenAddress}`;
 
-/** Places to buy, best first. Only Clanker is known to work on chains besides Base. */
-export function tradeLinks({ chainKey, tokenAddress: token }: ChainRef): Link[] {
-    const clanker = { label: 'Clanker', href: `https://www.clanker.world/clanker/${token}` };
-    if (chainKey !== 'base') return [clanker];
-    return [
+/** Places to buy, best first. Each launchpad's own page is the only link known to work everywhere. */
+export function tradeLinks({ source, chainKey, tokenAddress: token }: ChainRef): Link[] {
+    const home = source === 'bankr'
+        ? { label: 'Bankr', href: `https://bankr.bot/trade/${token}` }
+        : { label: 'Clanker', href: `https://www.clanker.world/clanker/${token}` };
+    if (chainKey !== 'base') return [home];
+
+    const dexes = [
         { label: 'Uniswap', href: `https://app.uniswap.org/swap?chain=base&outputCurrency=${token}` },
-        { label: 'Matcha', href: `https://matcha.xyz/tokens/base/${token}` },
-        clanker
+        { label: 'Matcha', href: `https://matcha.xyz/tokens/base/${token}` }
     ];
+    return source === 'bankr' ? [home, ...dexes] : [...dexes, home];
 }
 
 export function researchLinks({ chainKey, tokenAddress: token, poolId, explorerUrl, explorerName }: ChainRef): Link[] {

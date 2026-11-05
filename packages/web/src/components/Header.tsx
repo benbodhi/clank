@@ -9,7 +9,7 @@ export function Header() {
                 <img src="/icon.svg" alt="" width={36} height={36} className="h-9 w-9" />
                 <span>
                     <span className="block text-xl font-bold leading-tight tracking-tight">Clank</span>
-                    <span className="block text-xs text-muted-foreground">Clanker launches on Base, live</span>
+                    <span className="block text-xs text-muted-foreground">Clanker and Bankr launches, live</span>
                 </span>
             </Link>
             <ThemeToggle />

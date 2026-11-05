@@ -2,8 +2,9 @@ const { Client, Events, GatewayIntentBits, Options } = require('discord.js');
 
 const { settings, loadEnv } = require('./config');
 const { loadChains } = require('./config/chains');
-const { launchFilter } = require('./contracts/launchDecoder');
-const { createLaunchHandler, handleWithRetries } = require('./handlers/launchHandler');
+const { decodeDopplerCreate, launchFilter } = require('./contracts/launchDecoder');
+const { createBankrHandler, createLaunchHandler, handleWithRetries } = require('./handlers/launchHandler');
+const { BankrFeed } = require('./services/bankrFeed');
 const { LaunchStore, noStore } = require('./services/launchStore');
 const LogWatcher = require('./services/logWatcher');
 const { assertChainId, createProvider } = require('./services/rpc');
@@ -67,7 +68,7 @@ async function createStore(databaseUrl) {
 }
 
 /** One chain's watcher. Each has its own provider, so one failing can't affect another. */
-function createChainWatcher({ chain, env, store, send, stats }) {
+function createChainWatcher({ chain, env, store, send, stats, bankrFeed }) {
     const provider = createProvider(chain);
     const handleLaunchLog = createLaunchHandler({ chain, provider, store, send, stats, webUrl: env.webUrl });
     const { addresses, topics } = launchFilter(chain);
@@ -78,7 +79,11 @@ function createChainWatcher({ chain, env, store, send, stats }) {
         wsUrl: chain.wsUrl,
         addresses,
         topics,
-        onLog: (rawLog) => handleWithRetries(handleLaunchLog, rawLog, stats),
+        onLog: async (rawLog) => {
+            const dopplerToken = decodeDopplerCreate(rawLog, chain);
+            if (!dopplerToken) return handleWithRetries(handleLaunchLog, rawLog, stats);
+            void bankrFeed?.handleDopplerCreate({ tokenAddress: dopplerToken, createLog: rawLog, chain, provider });
+        },
         stateStore: env.databaseUrl ? store.forChain(chain.id) : new StateStore(env.stateFile.replace(/(\.json)?$/, `-${chain.key}.json`)),
         options: { ...settings.watcher, ...chain.watcher },
         stats
@@ -124,7 +129,20 @@ async function main() {
         : (message) => channel.send(message);
 
     const store = await createStore(env.databaseUrl);
-    const watchers = loadChains(env).map((chain) => createChainWatcher({ chain, env, store, send, stats }));
+    // Bankr's Source ID is 0 in the state table: it has a position, but isn't a chain.
+    const bankrHandler = createBankrHandler({ store, send, stats, webUrl: env.webUrl });
+    const bankrFeed = settings.bankr.enabled
+        ? new BankrFeed({
+            onLaunch: bankrHandler,
+            onEnriched: bankrHandler.enrich,
+            onUnconfirmed: bankrHandler.markUnconfirmed,
+            stateStore: env.databaseUrl ? store.forChain(0) : new StateStore(env.stateFile.replace(/(\.json)?$/, '-bankr.json')),
+            options: settings.bankr,
+            stats
+        })
+        : null;
+
+    const watchers = loadChains(env).map((chain) => createChainWatcher({ chain, env, store, send, stats, bankrFeed }));
 
     const heartbeat = setInterval(() => {
         const positions = Object.fromEntries(watchers.map(({ chain, watcher }) => [chain.key, watcher.nextBlock]));
@@ -137,7 +155,7 @@ async function main() {
         shuttingDown = true;
         logger.info(`${signal} received, shutting down`);
         clearInterval(heartbeat);
-        await Promise.all(watchers.map(({ watcher }) => watcher.stop()));
+        await Promise.all([...watchers.map(({ watcher }) => watcher.stop()), bankrFeed?.stop()]);
         logger.info(`Final stats: ${JSON.stringify(stats)}`);
         await client.destroy();
         await store.close();
@@ -147,8 +165,11 @@ async function main() {
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-    logger.info(`Watching ${watchers.map(({ chain }) => chain.name).join(', ')}`);
-    await Promise.all(watchers.map((entry) => startWhenAvailable(entry, () => shuttingDown)));
+    logger.info(`Watching ${watchers.map(({ chain }) => chain.name).join(', ')}${bankrFeed ? ', plus Bankr\'s feed' : ''}`);
+    await Promise.all([
+        ...watchers.map((entry) => startWhenAvailable(entry, () => shuttingDown)),
+        bankrFeed?.start().catch((error) => logger.failure('Bankr feed failed to start', error))
+    ]);
     logger.info('We are clanking');
 }
 

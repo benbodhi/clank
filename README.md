@@ -1,11 +1,13 @@
 # Clank
 
-Tracks Clanker token launches on Base in real time. See each new token, who's really behind it, and how to vet and buy it, in Discord or on a live web feed.
+Tracks Clanker and Bankr token launches in real time. See each new token, who's really behind it, and how to vet and buy it, in Discord or on a live web feed.
 
 - **Discord bot:** alerts with role pings, filtered down to launches with an identity
 - **Webapp:** a live feed of every launch, with search, vetting signals and trade links
 
 It watches Clanker v4 and v5 on Base, the two factories in use today, and is ready for [Elysium](#adding-elysium) once Clanker's details there are public. v3 is deprecated, and v3 presales have stopped.
+
+Bankr launches through Doppler now. On Base, Clank identifies them from the transaction itself, by the fees going to Bankr's wallets, so alerts are real time. [Bankr's API](https://docs.bankr.bot/token-launching/overview) can take about a minute to catch up, so it fills in the X account and image afterwards by editing the alert. Polling it every 30 seconds catches anything missed, and is the only source for Robinhood Chain and Arbitrum for now. Arc launches aren't tracked yet.
 
 ## How it fits together
 
@@ -41,7 +43,7 @@ Clanker's social context is [not authenticated](https://clanker.gitbook.io/docum
 
 For v5, the name, image and context come from the original transaction, because a token's creator can edit the stored copies after launch.
 
-Platform roles need setup: Bankr is self-reported, so it only pings for wallets you add to `deployers` in `packages/bot/src/config/settings.js`.
+The Bankr role pings for every launch in Bankr's own feed. A Clanker token that merely claims to be from Bankr is self-reported, so it gets a warning instead, unless you add its wallet to `deployers` in `packages/bot/src/config/settings.js`. Bankr links each deploying wallet to an X account, so Clank shows that handle, but a handle can still imitate someone else.
 
 ## Discord alerts
 
@@ -49,6 +51,7 @@ Every launch is stored for the webapp, while `notify` in `settings.js` decides w
 
 | Launch | Default | Setting |
 | --- | --- | --- |
+| Bankr launch | Posted, pings the Bankr role | `bankr.enabled` |
 | Proven or vetted Farcaster | Posted, with pings | `zeroFollowerAccounts` also allows accounts with no followers |
 | X deployment | Posted | `x` |
 | Named wallet | Posted | `namedWallets` |
@@ -67,10 +70,10 @@ To mute specific accounts, add their FIDs to `skippedFids`.
 ## Webapp
 
 - **Feed:** new launches appear instantly. If you've scrolled down, they wait behind a "new launches" button so cards don't jump.
-- **Filters:** Identified (default), Proven, or Everything.
+- **Filters:** Identified (default), Proven, Bankr, or Everything.
 - **Search:** by name, ticker, @username, FID or wallet.
 - **Vetting signals:** identity, serial deployers, lookalike characters like `UՏDT`, copied tickers, conflicting claims and Clanker's warning tags, plus tax, market cap and every wallet involved.
-- **Buying:** links out to Uniswap, Matcha or Clanker. The app never touches a wallet.
+- **Buying:** links out to Uniswap, Matcha, Clanker or Bankr. The app never touches a wallet.
 
 These are automated checks, not advice. A clean result doesn't make a token safe.
 

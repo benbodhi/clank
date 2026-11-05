@@ -18,9 +18,15 @@ function elysium(): ChainInfo | null {
     return { id, key: 'elysium', name: 'Elysium', explorerName: 'Explorer', explorerUrl };
 }
 
+/** Chains Bankr launches on, besides Base. */
+const BANKR_CHAINS: ChainInfo[] = [
+    { id: 4663, key: 'robinhood', name: 'Robinhood Chain', explorerName: 'Explorer', explorerUrl: 'https://robin.etherscan.io' },
+    { id: 42161, key: 'arbitrum', name: 'Arbitrum', explorerName: 'Arbiscan', explorerUrl: 'https://arbiscan.io' }
+];
+
 function chains(): ChainInfo[] {
     const extra = elysium();
-    return extra ? [BASE, extra] : [BASE];
+    return [BASE, ...BANKR_CHAINS, ...(extra ? [extra] : [])];
 }
 
 export function chainById(id: number): ChainInfo | null {

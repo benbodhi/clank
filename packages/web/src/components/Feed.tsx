@@ -14,6 +14,7 @@ const STREAM_RETRY_MS = 5000;
 const FILTERS: { value: FeedFilter; label: string; hint: string }[] = [
     { value: 'identified', label: 'Identified', hint: 'Launches with any identity, proven or claimed' },
     { value: 'proven', label: 'Proven', hint: 'Only launches where the identity is proven' },
+    { value: 'bankr', label: 'Bankr', hint: 'Launches from Bankr' },
     { value: 'all', label: 'Everything', hint: 'Every launch, including anonymous ones' }
 ];
 
@@ -21,7 +22,8 @@ type LiveStatus = 'connecting' | 'live' | 'offline';
 
 function matchesFilter(launch: Launch, filter: FeedFilter) {
     if (filter === 'proven') return launch.identityVerified;
-    if (filter === 'identified') return launch.identityKind !== 'none';
+    if (filter === 'bankr') return launch.source === 'bankr';
+    if (filter === 'identified') return launch.identityKind !== 'none' || launch.source === 'bankr';
     return true;
 }
 
