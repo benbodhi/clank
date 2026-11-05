@@ -1,9 +1,0 @@
-{
-    "clanker": {
-        "factory": "0x375C15db32D28cEcdcAB5C03Ab889bf15cbD2c5E",
-        "presale": "0x71cDc0bDF30F5601fb0ac80Cf1d20B771342C035"
-    },
-    "uniswap": {
-        "factory": "0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
-    }
-} 

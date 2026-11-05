@@ -1,0 +1,20 @@
+{
+  "name": "@clank/bot",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Watches Clanker factories on Base, records every launch and posts Discord alerts",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/bot.js",
+    "dry-run": "DRY_RUN=true node --env-file-if-exists=../../.env src/bot.js",
+    "backfill": "node --env-file-if-exists=../../.env src/scripts/backfill.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "discord.js": "^14.28.1",
+    "ethers": "^6.17.0",
+    "pg": "^8.23.1",
+    "winston": "^3.19.0",
+    "ws": "^8.22.1"
+  }
+}
