@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --background: 40 20% 97%;
+        --foreground: 220 20% 10%;
+        --card: 0 0% 100%;
+        --muted: 40 12% 92%;
+        --muted-foreground: 220 8% 40%;
+        --border: 40 10% 86%;
+        --primary: 130 55% 28%;
+        --primary-foreground: 0 0% 100%;
+        --proven: 130 60% 26%;
+        --caution: 32 90% 32%;
+        --danger: 0 70% 42%;
+    }
+
+    .dark {
+        --background: 220 16% 7%;
+        --foreground: 40 15% 94%;
+        --card: 220 14% 11%;
+        --muted: 220 12% 16%;
+        --muted-foreground: 220 8% 66%;
+        --border: 220 10% 21%;
+        --primary: 130 50% 54%;
+        --primary-foreground: 220 30% 6%;
+        --proven: 130 55% 62%;
+        --caution: 38 90% 60%;
+        --danger: 0 85% 70%;
+    }
+
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground antialiased;
+    }
+
+    :focus-visible {
+        @apply outline outline-2 outline-offset-2 outline-primary;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-launch-in {
+        animation: none;
+    }
+}

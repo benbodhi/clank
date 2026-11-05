@@ -1,388 +1,188 @@
 # Clank
 
-A Discord bot that monitors new token deployments on Base through the Clanker Factory contract, sending notifications to specified Discord channels with role tagging.
+Tracks Clanker token launches on Base in real time. See each new token, who's really behind it, and how to vet and buy it, in Discord or on a live web feed.
 
-## Features
+- **Discord bot:** alerts with role pings, filtered down to launches with an identity
+- **Webapp:** a live feed of every launch, with search, vetting signals and trade links
 
-- 🔍 Monitors in real-time:
-  - Clanker Factory token deployments
-  - Clanker Presale launches
-  - Presale contributions
-  - Clank.fun deployments
-- 📊 Provides detailed information including:
-  - Token deployments:
-    - Name and symbol
-    - Contract address with organized links:
-      - First line: Basescan, Dexscreener, GeckoTerminal
-      - Second line: Photon, Uniswap, Clank.fun
-    - Deployer address with blockchain explorer links
-    - Farcaster ID (FID) with profile link and follower count
-    - Supply details
-    - LP NFT ID with Uniswap position link
-    - Launch cast link
-  - Presale launches:
-    - Token details and supply
-    - Available supply percentage
-    - Presale goal in ETH
-    - Example purchase tiers
-    - End time countdown
-    - Direct link to Clanker World presale page
-  - Presale contributions:
-    - Buyer address
-    - ETH amount
-    - BPS purchased
-    - Transaction details
-- 🏷️ Role pinging system:
-  - Clank.fun deployment notifications
-  - Low FID notifications (configurable threshold)
-  - High follower count notifications
-  - Multiple threshold levels for fine-grained alerts
-- 🔄 Reliability Features:
-  - Automatic WebSocket reconnection with exponential backoff
-  - Resilient error handling and logging
-  - Graceful shutdown handling
-  - Service health monitoring (checks every minute, logs every 15 minutes)
-- 🧠 Smart Filtering:
-  - Distinguishes between Farcaster and Clank.fun deployments
-  - Avoids notifications for Clankers deployed by 0-follower accounts
-  - Configurable thresholds for notifications
-- 🎨 Visual Indicators:
-  - Orange embeds for Clank.fun deployments
-  - Green embeds for low FID deployments
-  - Purple embeds for high follower deployments
-  - Blue embeds for standard deployments
-  - Yellow embeds for presale launches
-  - Green embeds for presale contributions
+It watches Clanker v4 and v5 on Base, the two factories in use today, and is ready for [Elysium](#adding-elysium) once Clanker's details there are public. v3 is deprecated, and v3 presales have stopped.
 
-## Prerequisites
-
-- Node.js v18 or higher
-- npm or yarn
-- Discord bot token
-- Discord channel ID
-- Alchemy API key for Base network with:
-  - Webhooks enabled
-  - WebSockets enabled
-  - Debug API enabled
-
-## Alchemy Setup
-
-1. Create a new app for Base network in your Alchemy dashboard
-2. Enable required features:
-   - **WebSockets** - Required for real-time event monitoring
-   - **Webhooks** - For real-time notifications
-   - **Debug API** - For transaction and event tracing
-3. Copy your API key to use in the environment variables
-
-## Project Structure
+## How it fits together
 
 ```
-clank/
-├── src/
-│   ├── config/
-│   │   ├── index.js
-│   │   └── settings.js
-│   ├── contracts/
-│   │   ├── abis/
-│   │   │   ├── clanker/
-│   │   │   │   ├── ClankerFactory.json
-│   │   │   │   ├── ClankerFactoryV2.json
-│   │   │   │   ├── ClankerFactoryV3.json
-│   │   │   │   └── ClankerPreSale.json
-│   │   │   ├── token/
-│   │   │   │   └── Token.json
-│   │   │   └── uniswap/
-│   │   │       └── Factory.json
-│   │   ├── helpers/
-│   │   │   └── ClankerContractHelper.js
-│   │   ├── addresses.json
-│   │   └── utils.js
-│   ├── handlers/
-│   │   ├── clankerTokenHandler.js
-│   │   └── errorHandler.js
-│   ├── services/
-│   │   └── warpcastResolver.js
-│   ├── utils/
-│   │   ├── discordMessenger.js
-│   │   └── logger.js
-│   └── bot.js
-├── .env
-├── .env.example
-├── .gitignore
-├── package-lock.json
-├── package.json
-└── README.md
+Base (Alchemy) ──> bot ──> Discord
+                    │
+                    ▼
+                 Postgres ──NOTIFY──> web ──SSE──> browsers
 ```
 
-## Configuration
+| Service | Holds | Notes |
+| --- | --- | --- |
+| `packages/bot` | Alchemy key, Discord token, database write access | Not reachable from the internet |
+| `packages/web` | Database URL only, in read-only sessions | Public. A compromise exposes no keys |
+| Postgres | Launches and the watcher's position | Without it the bot still runs, Discord-only |
 
-The bot's configuration is split into multiple files:
+The bot gets each launch from a WebSocket for speed, and from an `eth_getLogs` sweep every 30 seconds to catch anything the socket missed. A dropped connection only costs latency. If Discord or the RPC goes down, alerts wait and retry instead of being lost. After a restart or an outage it catches up on as much as the last 30 minutes, and if the database is down it keeps alerting and writes the rows when it returns.
 
-### Application Settings
-- `src/config/settings.js`: Core application settings including:
-  - FID Thresholds for role notifications
-  - Follower Thresholds for role notifications
-  - Features toggles (e.g., `displayImages`)
+## Who's behind a token?
 
-### Contract Configuration
-- `src/contracts/addresses.json`: Contract addresses for:
-  - Clanker Factory
-  - Uniswap V3 Factory
+Clanker's social context is [not authenticated](https://clanker.gitbook.io/documentation/safety/verifying-the-social-context-of-token-deploys): anyone can claim any FID or X handle. So Clank starts from wallets and treats evidence by how much it proves.
 
-### Message Templates
-- `src/utils/discordMessenger.js`: Discord message formatting for:
-  - Clanker token deployments
-  - Embedded message layouts
+| Evidence | Meaning | Shown as | Pings roles? |
+| --- | --- | --- | --- |
+| The wallet that called Clanker directly is verified on a Farcaster account | Proven, even with no social context | Proven | Yes |
+| A Clanker-vetted wallet deployed for a Farcaster account | Vouched for by Clanker | Vetted | Yes |
+| A Clanker-vetted wallet deployed for an X account | Vouched for by Clanker | Vetted | No, there are no X roles |
+| An allowlisted platform deployer | Proven, once you list its wallets | Platform | Yes, the platform role |
+| The signing wallet has a Basename that resolves back to it | Owns the name, but no social account | Named wallet | No |
+| The admin or a fee wallet belongs to a known account | **Not proof.** Deployers can name any wallet without consent | ⚠️ Unproven link | No |
+| A social account or platform named in the token's context | **Not proof.** Anyone can claim one | ⚠️ Unverified | No |
+| A launch made through another contract | **Not proof of anything.** Someone could be tricked into signing it | ⚠️ Launched via a contract | No |
 
-## Environment Variables
+For v5, the name, image and context come from the original transaction, because a token's creator can edit the stored copies after launch.
 
-### Required Core Variables
-- `ALCHEMY_API_KEY`: Alchemy API key for Base network
-- `DISCORD_TOKEN`: Your Discord bot token
-- `DISCORD_CLANKER_CHANNEL_ID`: Channel ID for Clanker notifications
+Platform roles need setup: Bankr is self-reported, so it only pings for wallets you add to `deployers` in `packages/bot/src/config/settings.js`.
 
-### Role System Variables
-The bot uses a tiered notification system with cascading roles:
+## Discord alerts
 
-**FID Roles** (cascade downward)
-- `FID_BELOW_1000_ROLE` 🔥
-- `FID_BELOW_5000_ROLE` 👀
-- `FID_BELOW_10000_ROLE` 📊
+Every launch is stored for the webapp, while `notify` in `settings.js` decides what reaches Discord:
 
-**Follower Roles** (cascade upward)
-- `FOLLOWERS_OVER_5000_ROLE` 📈
-- `FOLLOWERS_OVER_10000_ROLE` ✨
-- `FOLLOWERS_OVER_20000_ROLE` ⭐
-- `FOLLOWERS_OVER_50000_ROLE` 💫
-- `FOLLOWERS_OVER_100000_ROLE` 🚀
-- `FOLLOWERS_OVER_200000_ROLE` 🌟
+| Launch | Default | Setting |
+| --- | --- | --- |
+| Proven or vetted Farcaster | Posted, with pings | `zeroFollowerAccounts` also allows accounts with no followers |
+| X deployment | Posted | `x` |
+| Named wallet | Posted | `namedWallets` |
+| Unverified claim or unproven link | Posted, with a warning | `unverifiedClaims` |
+| Self-reported platform | Posted, with a warning | `selfReportedPlatforms` |
+| Anonymous, about 3 in 4 launches | Not posted | `anonymous` |
 
-**Platform Role**
-- `CLANKFUN_DEPLOYER_ROLE` 🤖
+To mute specific accounts, add their FIDs to `skippedFids`.
 
-Copy `.env.example` to `.env` and fill in your values.
+### Roles
 
-## Installation
+- **FID roles** ping for FIDs below the threshold, so FID 800 pings Below 1,000, 5,000 and 10,000.
+- **Follower roles** ping at or above the threshold, so 120k followers pings every role from Over 5,000 to Over 100,000.
+- **Platform roles** ping on their own, instead of FID and follower roles.
 
-1. Clone the repository:
+## Webapp
+
+- **Feed:** new launches appear instantly. If you've scrolled down, they wait behind a "new launches" button so cards don't jump.
+- **Filters:** Identified (default), Proven, or Everything.
+- **Search:** by name, ticker, @username, FID or wallet.
+- **Vetting signals:** identity, serial deployers, lookalike characters like `UՏDT`, copied tickers, conflicting claims and Clanker's warning tags, plus tax, market cap and every wallet involved.
+- **Buying:** links out to Uniswap, Matcha or Clanker. The app never touches a wallet.
+
+These are automated checks, not advice. A clean result doesn't make a token safe.
+
+## Setup
+
+You need Node 22.12+, pnpm, a [Discord application](https://discord.com/developers/applications) and an [Alchemy](https://dashboard.alchemy.com) key for Base. The free tier is enough. Postgres is needed for the webapp.
+
 ```bash
 git clone https://github.com/benbodhi/clank.git
 cd clank
+pnpm install
+cp .env.example .env   # then fill it in
 ```
 
-2. Install dependencies:
+| Variable | Used by | Required | Purpose |
+| --- | --- | --- | --- |
+| `ALCHEMY_API_KEY` | bot | Yes | Base RPC and WebSocket |
+| `DISCORD_TOKEN` | bot | Yes | Bot token |
+| `DISCORD_CLANKER_CHANNEL_ID` | bot | Yes | Channel for alerts |
+| `DATABASE_URL` | bot, web | For the webapp | Postgres connection |
+| `WEB_URL` | bot | No | Adds "Vet on Clank" links to alerts |
+| `*_ROLE` | bot | No | Role IDs. An unset role just isn't pinged |
+| `DRY_RUN` | bot | No | `true` logs alerts instead of posting them |
+| `ELYSIUM_*` | bot, web | No | See [Adding Elysium](#adding-elysium) |
+
 ```bash
-npm install
+pnpm bot:dry-run   # watch live launches without posting anything
+pnpm bot           # the real bot
+pnpm web           # the webapp, at http://localhost:3000
+pnpm backfill 3    # record the last 3 hours without posting, so the feed has history
+pnpm test
 ```
 
-3. Set up your environment variables in `.env`
+### Discord
 
-4. Start the bot:
-```bash
-npm start
+1. In the Developer Portal, create an application and a bot. It needs **no privileged intents**.
+2. Invite it with the `bot` scope and these permissions: View Channels, Send Messages, Embed Links.
+3. In **Server Settings > Roles**, turn on "Allow anyone to @mention this role" for each role the bot should ping. This is safer than giving the bot Mention Everyone.
+4. Enable Developer Mode, then copy the channel and role IDs into `.env`.
+
+On startup, the bot checks its channel access and logs a warning for any role that's missing or can't be pinged. Members can pick their own roles with a tool like MEE6's reaction roles.
+
+## Deploying to Railway
+
+Create a project from this repo with three services:
+
+| Service | Build command | Start command | Variables |
+| --- | --- | --- | --- |
+| **Postgres** | Railway's Postgres template | | |
+| **bot** | Default | `pnpm --filter @clank/bot start` | The bot variables, with `DATABASE_URL` set to `${{Postgres.DATABASE_URL}}` |
+| **web** | `pnpm --filter @clank/web build` | `pnpm --filter @clank/web start` | `DATABASE_URL` set to `${{Postgres.DATABASE_URL}}` |
+
+On **web**, generate a domain and set the health check path to `/api/health`. Then set `WEB_URL` on the bot to that domain. To avoid unrelated rebuilds, set watch paths to `packages/bot/**` and `packages/web/**`, plus `pnpm-lock.yaml` on each.
+
+The bot creates the database tables on its first start. Keep `DRY_RUN=true` on the bot until you're ready for real alerts.
+
+Run only one live copy of the bot at a time, or alerts will post twice.
+
+## Adding Elysium
+
+[Elysium](https://kinetiq.xyz/docs/elysium-technical-overview) is Kinetiq's Hyperliquid L2. Clank needs no code change to support it, just these variables once its details are public. Until they're set it stays off, and a partial or invalid setup stops the bot at startup with a message naming what's wrong.
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `ELYSIUM_CHAIN_ID` | bot, web | Mainnet chain ID. The bot checks the RPC reports the same one |
+| `ELYSIUM_RPC_URL` | bot | HTTPS RPC |
+| `ELYSIUM_WS_URL` | bot | Optional WebSocket for lower latency. Without it, launches arrive with the 30-second sweep |
+| `ELYSIUM_EXPLORER_URL` | bot, web | Block explorer |
+| `ELYSIUM_FACTORY_V4` | bot | Clanker's v4 factory, if deployed there |
+| `ELYSIUM_FACTORY_V5`, `ELYSIUM_V5_HOOK` | bot | Clanker's v5 factory and hook, if deployed there |
+
+Clanker lists its factories at `https://www.clanker.world/api/metadata/factories`. Before enabling a factory, check that its `tokenCreated` or `launched` event hash matches `V4_TOPIC` or `V5_TOPIC` in `launchDecoder.js`: a new event format needs a code change, and would otherwise show up as no launches at all.
+
+Each chain runs independently, so a problem on one can't stop alerts from another. Elysium launches get a chain label and link to its explorer and to Clanker, until DEX links are known.
+
+## Usage limits
+
+On Alchemy's free tier, the sweep makes about 4,300 `eth_getLogs` calls a day. That's roughly 8M of the 30M monthly compute units, plus a small amount for token lookups. On a paid plan, raising `watcher.logRangeBlocks` in `settings.js` lowers this.
+
+Clank also reads from Clanker's public API, for wallet-to-profile lookups and market data. If it's down, each launch retries for about 20 seconds, then goes out anyway: only vetted deployers can ping, and without follower counts.
+
+## Project layout
+
 ```
-
-## Error Handling
-
-The bot includes comprehensive error handling:
-- Automatic WebSocket reconnection
-- Detailed error logging with timestamps
-- Graceful shutdown handling
-- Service health monitoring
-
-## Deployment
-
-The bot can be deployed on platforms like Railway:
-
-1. **Prepare Repository**
-   - Push code to GitHub
-   - Ensure `.gitignore` includes sensitive files
-
-2. **Deploy on Railway**
-   - Create new project from GitHub repo
-   - Set environment variables
-   - Deploy using `npm start`
-
-## Discord Bot Setup
-
-1. **Create a New Discord Application**
-   - Go to the [Discord Developer Portal](https://discord.com/developers/applications)
-   - Click "New Application" and give it a name
-   - Go to the "Bot" section and click "Add Bot"
-   - Under "Privileged Gateway Intents", enable:
-     - Server Members Intent
-     - Message Content Intent
-
-2. **Get Your Bot Token**
-   - In the "Bot" section, click "Reset Token" to reveal your bot token
-   - Copy this token - you'll need it for your `.env` file
-   - Keep this token secret and never share it
-
-3. **Role Setup**
-   - Enable Developer Mode in Discord (User Settings > App Settings > Advanced)
-   - Create the roles listed in the Environment Variables section above
-   - Right-click each role and "Copy ID" to get the role IDs
-   - Add these IDs to your `.env` file
-   - Ensure the bot's role is higher than all notification roles
-
-4. **Invite Bot to Server**
-   - Go to OAuth2 > URL Generator
-   - Select the following scopes:
-     - `bot`
-     - `applications.commands`
-   - Select the following bot permissions:
-     - `Read Messages/View Channels`
-     - `Read Message History`
-     - `Send Messages`
-     - `Embed Links`
-     - `Mention Everyone` (for role pings)
-   - Copy the generated URL and open it in a browser
-   - Select your server and authorize the bot
-
-5. **Configure Channel**
-   - Create or select a channel for notifications
-   - Right-click the channel and copy the ID
-   - Add this ID to your environment variables
-
-6. **Bot Permissions**
-   Ensure the bot has the following permissions in the notification channel:
-   - View Channel
-   - Send Messages
-   - Embed Links
-   - Mention Roles
-
-7. **Role Hierarchy**
-   - Ensure the bot's role is higher than all notification roles in the server settings
-   - This allows the bot to mention these roles in messages
-
-### Role Behavior
-
-- **FID Roles**: Only triggers the highest applicable role (e.g., FID 800 only triggers Below 1,000 role 🔥)
-- **Follower Roles**: Only triggers the highest applicable role (e.g., 120k followers only triggers Over 100,000 role 🚀)
-- **Platform Role**: Independent of other thresholds, only triggers for clank.fun deployments with orange embed color
-
-## MEE6 Role Self-Service Setup
-
-1. **Add MEE6 to Your Server**
-   - Visit [MEE6's website](https://mee6.xyz/add)
-   - Select your server and authorize the bot
-   - Grant necessary permissions
-
-2. **Configure Reaction Roles**
-   - Go to your server's MEE6 dashboard
-   - Navigate to "Reaction Roles" feature
-   - Click "Create Reaction Role"
-   - Set up the following:
-     - Create a new message or use existing
-     - Add your Low FID Alert role
-     - Choose an emoji (e.g., 🔔)
-     - Save configuration
-
-3. **Example Message Format**
+packages/
+├── bot/
+│   ├── migrations/            Database schema
+│   ├── src/
+│   │   ├── bot.js             Startup and shutdown
+│   │   ├── config/            Environment, settings and chains
+│   │   ├── contracts/         Log and transaction decoding
+│   │   ├── handlers/          Identity resolution and alert decisions
+│   │   ├── services/          Log watcher, storage, Clanker API, Basenames
+│   │   ├── scripts/           Backfill
+│   │   └── utils/             Discord messages, sanitizing, logging
+│   └── test/
+└── web/
+    ├── src/
+    │   ├── app/               Pages and API routes
+    │   ├── components/        Feed, cards, token page
+    │   └── lib/               Queries, vetting signals, validation
+    └── test/
 ```
-🚨 **Get Notified About Low FID Token Launches** 🚨
-
-Use the button below to get the role to receive notifications when tokens are launched by users with low Farcaster IDs (FIDs).
-```
-
-Now users can simply react to get the roles and be notified about token launches by casters who meet the desired thresholds!
-
-## Role Selection Guide
-
-### Understanding Notifications
-The bot automatically tags all relevant roles for each new token. This means:
-
-**For FID Thresholds:**
-- If a token has FID 800, it will notify:
-  - Below 1,000 role 🔥 (because 800 < 1,000)
-  - Below 5,000 role 👀 (because 800 < 5,000)
-  - Below 10,000 role 📊 (because 800 < 10,000)
-
-**For Follower Thresholds:**
-- If a creator has 120k followers, it will notify:
-  - Over 100,000 role 🚀 (because 120k > 100k)
-  - Over 50,000 role 💫 (because 120k > 50k)
-  - Over 20,000 role ⭐ (because 120k > 20k)
-  - Over 10,000 role ✨ (because 120k > 10k)
-  - Over 5,000 role 📈 (because 120k > 5k)
-
-**For Platform Deployments:**
-- If a token is deployed through clank.fun:
-  - Clank.fun deployer role 🤖
-  - FID and follower notifications are not triggered
-  - Displays orange embed color
-
-### Available Roles
-**FID Thresholds:**
-- Below 1,000 🔥
-- Below 5,000 👀
-- Below 10,000 📊
-
-**Follower Thresholds:**
-- Over 5,000 📈
-- Over 10,000 ✨
-- Over 20,000 ⭐
-- Over 50,000 💫
-- Over 100,000 🚀
-- Over 200,000 🌟
-
-**Platform:**
-- Clank.fun Deployer 🤖
-
-### Selecting Your Roles
-1. **For FID notifications:**
-   - Select roles for the FID ranges you want to monitor
-   - You'll get notifications for all FIDs BELOW your selected numbers
-   - Example: "Below 5k" role will notify you about FIDs 1-4,999
-
-2. **For follower notifications:**
-   - Select roles for the follower counts you want to monitor
-   - You'll get notifications for all accounts ABOVE your selected numbers
-   - Example: "Over 20k" role will notify you about accounts with 20k+ followers
-
-3. **For platform notifications:**
-   - Select the clank.fun role to get notifications for all tokens deployed through clank.fun
-   - These notifications are independent of FID/follower thresholds
-
-4. **Want multiple?**
-   - Select any combination of roles
-   - You'll get notifications when ANY of your selected conditions are met
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-I had issues integrating basename resolution because all examples I found in docs are react components. ENS resolution was easy, but seemed to unnecessarily slow down processing. If you can integrate these efficiently, I'd love to display them.
+Contributions are welcome. Please open a pull request.
 
 ## Author
 
-**Benbodhi**
-- Farcaster: [@benbodhi](https://warpcast.com/benbodhi)
-- Twitter: [@benbodhi](https://twitter.com/benbodhi)
-- GitHub: [@benbodhi](https://github.com/benbodhi)
+**Benbodhi**: [Farcaster](https://farcaster.xyz/benbodhi) · [X](https://x.com/benbodhi) · [GitHub](https://github.com/benbodhi)
 
 ## License
 
-MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-Built for the Base ecosystem
-- We love Base
-- We love Clanker
-- We love Warpcast
-- We love Discord
-
-**We is just me btw*
-
-Powered By:
-- Ethers.js v6 for blockchain interaction
-- Discord.js for Discord integration
-- Warpcast API for Farcaster data
-- Winston for structured logging
-- Alchemy for WebSocket provider
-- MEE6 for role management integration
-- Uniswap V3 for trading interface
-- Photon for faster trading interface
-- Dexscreener for market data links
-- Basescan & Etherscan for blockchain explorer links
+MIT. See [LICENSE](LICENSE).
